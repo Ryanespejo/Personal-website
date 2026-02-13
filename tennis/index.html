@@ -77,6 +77,34 @@
     .chip.chip-live.active .live-dot { animation: blink 1.2s ease-in-out infinite; }
     @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
 
+    /* ── Tournament dropdown ── */
+    .tourn-select {
+      background: var(--panel);
+      color: var(--muted);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 0.38rem 1.9rem 0.38rem 0.8rem;
+      font-size: 0.78rem;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+      font-family: inherit;
+      cursor: pointer;
+      outline: none;
+      -webkit-appearance: none;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%239ba7c6'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 0.65rem center;
+      background-size: 8px 5px;
+      transition: border-color 0.15s, color 0.15s;
+      max-width: 200px;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .tourn-select:hover { border-color: var(--accent); color: var(--accent); }
+    .tourn-select:focus { border-color: var(--accent); outline: none; }
+    .tourn-select option { background: #111625; color: #f4f7ff; text-transform: none; letter-spacing: 0; }
+
     /* ── Countdown ── */
     .countdown {
       margin-left: auto; display: flex; align-items: center; gap: 0.45rem;
@@ -281,6 +309,11 @@
     .pred-article:last-child { border-bottom: none; }
     .pred-article-title { font-size: 0.79rem; color: var(--text); text-decoration: none; line-height: 1.45; display: block; }
     .pred-article-title:hover { color: var(--accent); }
+    .pred-snippet {
+      font-size: 0.74rem; color: var(--muted); line-height: 1.55;
+      margin-top: 0.3rem; display: -webkit-box; -webkit-line-clamp: 4;
+      -webkit-box-orient: vertical; overflow: hidden;
+    }
     .pred-source-label { font-size: 0.64rem; color: var(--muted); margin-top: 0.18rem; letter-spacing: 0.02em; }
     .pred-msg { font-size: 0.75rem; color: var(--muted); font-style: italic; }
 
@@ -307,6 +340,9 @@
       <button class="chip" data-tour="atp">ATP</button>
       <button class="chip" data-tour="wta">WTA</button>
       <button class="chip chip-live" id="btn-live"><span class="live-dot"></span>Live</button>
+      <select id="tourn-select" class="tourn-select">
+        <option value="">All Tournaments</option>
+      </select>
       <div class="countdown" id="countdown-wrap" style="display:none">
         <svg class="countdown-ring" viewBox="0 0 24 24">
           <circle cx="12" cy="12" r="9"/>
@@ -362,6 +398,7 @@
     const DATE_ROW    = document.getElementById('date-row');
     const INSIGHTS    = document.getElementById('insights-body');
     const BTN_LIVE    = document.getElementById('btn-live');
+    const TOURN_SEL   = document.getElementById('tourn-select');
 
     const tourChips = [...document.querySelectorAll('.chip[data-tour]')];
 
@@ -380,11 +417,12 @@
 
     const REFRESH_SEC  = 30;
     const CIRCUMFERENCE = 56.5;
-    let cachedMatches = [];
-    let tourFilter    = 'all';
-    let liveOnly      = false;
-    let dateFilter    = null;
-    let selectedId    = null;
+    let cachedMatches    = [];
+    let tourFilter       = 'all';
+    let liveOnly         = false;
+    let dateFilter       = null;
+    let tournamentFilter = '';
+    let selectedId       = null;
     let countdown     = REFRESH_SEC;
     let countdownTimer = null;
 
@@ -409,7 +447,8 @@
       if (roundName) tournament += ` · ${roundName}`;
       const sorted = [...competitors].sort((a, b) => (a.order ?? 99) - (b.order ?? 99));
       const players = sorted.map(c => ({
-        name: c.athlete?.shortName || c.athlete?.displayName || c.name || 'Player',
+        name:     c.athlete?.shortName || c.athlete?.displayName || c.name || 'Player',
+        fullName: c.athlete?.displayName || c.athlete?.shortName || c.name || 'Player',
         sets: (c.linescores || []).map(l => l.value != null ? String(Math.round(l.value)) : '—'),
         game: String(c.score || '—'),
         serving: !!c.status?.isCurrent,
@@ -483,6 +522,28 @@
       );
     }
 
+    // ── Tournament dropdown ───────────────────────────────────────────────────
+
+    // A player "name" that contains " vs " is a match summary, not a real name — skip it
+    function isValidPlayerName(name) {
+      return !/ vs /i.test(name);
+    }
+
+    function updateTournSelect(matches) {
+      // Scope tournament list to whichever tour is active
+      const scoped = tourFilter === 'all' ? matches : matches.filter(m => m.tour === tourFilter);
+      // Only include matches with real player names
+      const valid = scoped.filter(m => m.players.every(p => isValidPlayerName(p.name)));
+      const tournaments = [...new Set(valid.map(m => m.tournamentName).filter(Boolean))].sort();
+      const prev = TOURN_SEL.value;
+      TOURN_SEL.innerHTML = '<option value="">All Tournaments</option>' +
+        tournaments.map(t => `<option value="${t}"${prev === t ? ' selected' : ''}>${t}</option>`).join('');
+      // If the previously selected tournament no longer exists in this scope, reset
+      if (prev && !tournaments.includes(prev)) {
+        tournamentFilter = '';
+      }
+    }
+
     // ── Render ────────────────────────────────────────────────────────────────
 
     function badgeHtml(m) {
@@ -524,9 +585,12 @@
 
     function renderAll(matches) {
       let filtered = matches;
-      if (tourFilter !== 'all') filtered = filtered.filter(m => m.tour === tourFilter);
-      if (liveOnly)             filtered = filtered.filter(m => m.isLive);
-      if (dateFilter)           filtered = filtered.filter(m => m.date === dateFilter);
+      // Drop entries where any "player" name is really a "A vs B" string
+      filtered = filtered.filter(m => m.players.every(p => isValidPlayerName(p.name)));
+      if (tourFilter !== 'all')  filtered = filtered.filter(m => m.tour === tourFilter);
+      if (liveOnly)              filtered = filtered.filter(m => m.isLive);
+      if (dateFilter)            filtered = filtered.filter(m => m.date === dateFilter);
+      if (tournamentFilter)      filtered = filtered.filter(m => m.tournamentName === tournamentFilter);
 
       const liveN = matches.filter(m => m.isLive).length;
       LIVE_COUNT.textContent = liveN ? `${liveN} Live` : `${matches.length} total`;
@@ -591,17 +655,19 @@
     // ── Predictions ───────────────────────────────────────────────────────────
 
     const PRED_SOURCES = [
-      { id: 'tennistonic', name: 'Tennis Tonic',        color: '#62f2a6', url: 'https://tennistonic.com/?s={}' },
-      { id: 'grandstand',  name: 'The Grandstand',      color: '#7dd3fc', url: 'https://tenngrand.com/?s={}' },
-      { id: 'lwos',        name: 'Last Word on Sports',  color: '#f9a8d4', url: 'https://lastwordonsports.com/?s={}' },
+      { id: 'tennistonic', name: 'Tennis Tonic H2H',    color: '#62f2a6' },
+      { id: 'grandstand',  name: 'The Grandstand',      color: '#7dd3fc', url: 'https://tenngrand.com/category/match-previews/' },
+      { id: 'lwos',        name: 'Last Word on Sports',  color: '#f9a8d4', url: 'https://lastwordonsports.com/tennis/' },
     ];
 
-    function predLinks(name1, name2, tournament, year) {
-      // Sites write tournament-preview articles — search by tournament + year
-      const tournQ  = encodeURIComponent(`${tournament} ${year} tennis`);
-      const xQ      = encodeURIComponent(`${name1} ${name2} ${tournament} ${year}`);
+    function predLinks(name1, name2, fullName1, fullName2, tournament, year) {
+      const tournQ = encodeURIComponent(`${tournament} ${year} tennis`);
+      const xQ     = encodeURIComponent(`${name1} ${name2} ${tournament} ${year}`);
+      // Tennis Tonic H2H URL: full name with spaces → dashes
+      const ttSlug = (n) => (n || '').replace(/\s+/g, '-');
+      const ttH2h  = `https://tennistonic.com/head-to-head-compare/${ttSlug(fullName1)}-Vs-${ttSlug(fullName2)}/`;
       const siteLinks = PRED_SOURCES.map(s => {
-        const href = s.url.replace('{}', tournQ);
+        const href = s.id === 'tennistonic' ? ttH2h : s.url.replace('{}', tournQ);
         return `<a class="pred-link" href="${href}" target="_blank" rel="noopener"
                    style="color:${s.color};border-color:${s.color}40;background:${s.color}12">
                    ${s.name}</a>`;
@@ -612,16 +678,19 @@
       return siteLinks + xLink;
     }
 
-    async function fetchPredictions(name1, name2, tournament, year) {
+    async function fetchPredictions(name1, name2, fullName1, fullName2, tournament, year) {
       const el = document.getElementById('pred-articles');
       if (!el) return;
       try {
-        const p1 = encodeURIComponent(name1);
-        const p2 = encodeURIComponent(name2);
-        const t  = encodeURIComponent(tournament || '');
-        const y  = encodeURIComponent(year || '');
-        const res = await fetch(`/api/tennis-news?player1=${p1}&player2=${p2}&tournament=${t}&year=${y}`,
-                                { signal: AbortSignal.timeout(10000) });
+        const p1  = encodeURIComponent(name1);
+        const p2  = encodeURIComponent(name2);
+        const fn1 = encodeURIComponent(fullName1 || name1);
+        const fn2 = encodeURIComponent(fullName2 || name2);
+        const t   = encodeURIComponent(tournament || '');
+        const y   = encodeURIComponent(year || '');
+        const res = await fetch(
+          `/api/tennis-news?player1=${p1}&player2=${p2}&fullname1=${fn1}&fullname2=${fn2}&tournament=${t}&year=${y}`,
+          { signal: AbortSignal.timeout(12000) });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
         const articles = (data.sources || []).flatMap(s =>
@@ -635,6 +704,7 @@
         el.innerHTML = articles.map(a => `
           <div class="pred-article">
             <a class="pred-article-title" href="${a.url}" target="_blank" rel="noopener">${a.title}</a>
+            ${a.snippet ? `<p class="pred-snippet">${a.snippet}</p>` : ''}
             <div class="pred-source-label" style="color:${a.sourceColor}">${a.sourceName}</div>
           </div>`).join('');
       } catch (_) {
@@ -749,7 +819,7 @@
         <div class="ins-section" id="pred-section">
           <div class="ins-title">Prediction Sources</div>
           <div class="pred-links">
-            ${predLinks(p1.name, p2.name, match.tournamentName, (match.date || '').slice(0, 4))}
+            ${predLinks(p1.name, p2.name, p1.fullName || p1.name, p2.fullName || p2.name, match.tournamentName, (match.date || '').slice(0, 4))}
           </div>
           <div id="pred-articles"><span class="pred-msg">Loading previews…</span></div>
         </div>`;
@@ -775,7 +845,7 @@
       }
 
       // Async predictions
-      fetchPredictions(p1.name, p2.name, match.tournamentName, (match.date || '').slice(0, 4));
+      fetchPredictions(p1.name, p2.name, p1.fullName || p1.name, p2.fullName || p2.name, match.tournamentName, (match.date || '').slice(0, 4));
 
       // On mobile scroll down to insights
       if (window.innerWidth <= 920) {
@@ -815,6 +885,7 @@
         const { matches, source } = await loadMatches();
         cachedMatches = matches;
         updateDateChips(matches);
+        updateTournSelect(matches);
         renderAll(matches);
         setSourcePill(source);
         const isFallback = source === 'fallback';
@@ -838,9 +909,16 @@
 
     tourChips.forEach(c => c.addEventListener('click', () => {
       tourFilter = c.dataset.tour;
+      tournamentFilter = ''; // reset tournament filter when changing tour
       tourChips.forEach(x => x.classList.toggle('active', x === c));
+      updateTournSelect(cachedMatches);
       renderAll(cachedMatches);
     }));
+
+    TOURN_SEL.addEventListener('change', () => {
+      tournamentFilter = TOURN_SEL.value;
+      renderAll(cachedMatches);
+    });
 
     BTN_LIVE.addEventListener('click', () => {
       liveOnly = !liveOnly;
