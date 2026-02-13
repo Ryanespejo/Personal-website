@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: dev
-      url: https://ryanaespejo.dev
+      url: https://raespejo.com
     steps:
       - name: Checkout
         uses: actions/checkout@v4

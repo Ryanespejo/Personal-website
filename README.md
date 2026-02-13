@@ -1,6 +1,6 @@
 # Personal-website
 
-Personal website and app playground deployed to [ryanaespejo.dev](https://ryanaespejo.dev).
+Personal website and app playground deployed to [raespejo.com](https://raespejo.com).
 
 ## Deployment
 
