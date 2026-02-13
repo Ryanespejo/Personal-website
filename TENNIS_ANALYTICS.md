@@ -107,6 +107,7 @@ Match CSVs contain ~49 columns per row: tournament info, player biographics, ran
 If RapidAPI is unavailable, the endpoint still returns baseline ML predictions.
 
 - If RapidAPI auth fails (401/403), the endpoint now gracefully falls back to baseline ML and returns a status message in `custom_analytics.rapidapi_status`.
+- If no key is set, `custom_analytics.rapidapi_status.message` now explicitly reports the missing key configuration.
 
 ## Usage
 

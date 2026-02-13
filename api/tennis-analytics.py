@@ -250,6 +250,8 @@ def _extract_rapid_metrics(stats: dict, fallback_rank: float, fallback_points: f
 
 
 def _custom_analytics(p1_name: str, p2_name: str, p1_rank: float, p2_rank: float, p1_points: float, p2_points: float) -> dict:
+    if not RAPIDAPI_KEY:
+        _set_rapid_status(False, "RAPIDAPI key missing (set RAPIDAPI_KEY or RAPIDAPI_TENNIS_KEY)")
     p1_id = _rapid_find_player_id(p1_name)
     p2_id = _rapid_find_player_id(p2_name)
     s1 = _extract_rapid_metrics(_rapid_player_stats(p1_id), p1_rank, p1_points)
