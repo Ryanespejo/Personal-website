@@ -315,6 +315,52 @@
     .pred-source-label { font-size: 0.64rem; color: var(--muted); margin-top: 0.18rem; letter-spacing: 0.02em; }
     .pred-msg { font-size: 0.75rem; color: var(--muted); font-style: italic; }
 
+    /* ── ML Prediction ── */
+    .ml-section { border-top: 1px solid var(--line); padding: 0.85rem 1rem; }
+    .ml-title {
+      font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.07em;
+      color: var(--muted); margin-bottom: 0.65rem; font-weight: 600;
+      display: flex; align-items: center; gap: 0.45rem;
+    }
+    .ml-badge {
+      font-size: 0.58rem; padding: 0.12rem 0.4rem; border-radius: 999px;
+      background: rgba(168,85,247,0.12); color: #c084fc; border: 1px solid rgba(168,85,247,0.35);
+      letter-spacing: 0.04em;
+    }
+    .ml-prob-row {
+      display: flex; justify-content: space-between; align-items: baseline;
+      margin-bottom: 0.35rem; font-size: 0.84rem; font-weight: 600;
+    }
+    .ml-prob-pct { font-variant-numeric: tabular-nums; }
+    .ml-prob-pct.fav { color: #c084fc; }
+    .ml-bar {
+      display: flex; height: 7px; border-radius: 999px; overflow: hidden;
+      background: var(--line); gap: 2px; margin-bottom: 0.45rem;
+    }
+    .ml-seg { border-radius: 999px; transition: flex 0.5s ease; }
+    .ml-seg.p1 { background: #c084fc; }
+    .ml-seg.p2 { background: var(--wta); }
+    .ml-confidence {
+      font-size: 0.71rem; color: var(--muted); margin-bottom: 0.55rem;
+    }
+    .ml-confidence-fill {
+      display: inline-block; height: 4px; border-radius: 999px;
+      background: #c084fc; vertical-align: middle; margin-left: 0.3rem;
+    }
+    .ml-factors { list-style: none; padding: 0; }
+    .ml-factors li {
+      font-size: 0.74rem; color: var(--muted); padding: 0.18rem 0;
+      display: flex; align-items: center; gap: 0.4rem;
+    }
+    .ml-factors .arrow { font-size: 0.68rem; width: 1rem; text-align: center; flex-shrink: 0; }
+    .ml-factors .arrow.p1 { color: #c084fc; }
+    .ml-factors .arrow.p2 { color: var(--wta); }
+    .ml-model-info {
+      font-size: 0.65rem; color: var(--muted); margin-top: 0.5rem;
+      opacity: 0.7; border-top: 1px solid var(--line); padding-top: 0.4rem;
+    }
+    .ml-msg { font-size: 0.75rem; color: var(--muted); font-style: italic; }
+
     @media (max-width: 920px) {
       .layout { grid-template-columns: 1fr; }
       .insights-panel { position: static; }
@@ -699,6 +745,61 @@
       }
     }
 
+    // ── ML Prediction ────────────────────────────────────────────────────────
+
+    async function fetchMLPrediction(name1, name2, fullName1, fullName2, tour) {
+      const el = document.getElementById('ml-body');
+      if (!el) return;
+      try {
+        const p1 = encodeURIComponent(fullName1 || name1);
+        const p2 = encodeURIComponent(fullName2 || name2);
+        const t  = encodeURIComponent(tour || 'atp');
+        const res = await fetch(
+          `/api/tennis-analytics?action=predict&player1=${p1}&player2=${p2}&tour=${t}&surface=hard`,
+          { signal: AbortSignal.timeout(15000) }
+        );
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const d = await res.json();
+        if (!el || !document.getElementById('ml-section')) return;
+
+        const p1Pct = Math.round(d.p1_win_prob * 100);
+        const p2Pct = Math.round(d.p2_win_prob * 100);
+        const confPct = Math.round(d.confidence * 100);
+        const p1Fav = d.p1_win_prob >= d.p2_win_prob;
+
+        const factorsHtml = (d.key_factors || []).map(f => {
+          const isP1 = f.direction === 'favors_p1';
+          return `<li>
+            <span class="arrow ${isP1 ? 'p1' : 'p2'}">${isP1 ? '&#9650;' : '&#9660;'}</span>
+            ${f.label}
+          </li>`;
+        }).join('');
+
+        const modelInfo = d.model_info || {};
+        const accText = modelInfo.accuracy ? `${Math.round(modelInfo.accuracy * 100)}% accuracy` : '';
+        const dateText = modelInfo.trained_at ? new Date(modelInfo.trained_at).toLocaleDateString() : '';
+        const infoLine = [accText, dateText].filter(Boolean).join(' · ');
+
+        el.innerHTML = `
+          <div class="ml-prob-row">
+            <span class="ml-prob-pct${p1Fav ? ' fav' : ''}">${name1} ${p1Pct}%</span>
+            <span class="ml-prob-pct${!p1Fav ? ' fav' : ''}">${p2Pct}% ${name2}</span>
+          </div>
+          <div class="ml-bar">
+            <div class="ml-seg p1" style="flex:${Math.max(d.p1_win_prob, 0.05)}"></div>
+            <div class="ml-seg p2" style="flex:${Math.max(d.p2_win_prob, 0.05)}"></div>
+          </div>
+          <div class="ml-confidence">
+            Confidence: ${confPct}%
+            <span class="ml-confidence-fill" style="width:${confPct}px"></span>
+          </div>
+          ${factorsHtml ? `<div class="ins-title" style="margin-top:0.3rem">Key Factors</div><ul class="ml-factors">${factorsHtml}</ul>` : ''}
+          ${infoLine ? `<div class="ml-model-info">Model: ${infoLine}</div>` : ''}`;
+      } catch (_) {
+        if (el) el.innerHTML = '<span class="ml-msg">ML prediction unavailable</span>';
+      }
+    }
+
     // ── Insights ──────────────────────────────────────────────────────────────
 
     function getH2H(matches, id1, id2) {
@@ -799,6 +900,11 @@
           <div class="form-line">${formBadges(form2)}</div>
         </div>
 
+        <div class="ml-section" id="ml-section">
+          <div class="ml-title">ML Prediction <span class="ml-badge">BETA</span></div>
+          <div id="ml-body"><span class="ml-msg">Analyzing…</span></div>
+        </div>
+
         <div class="ins-section" id="pred-section">
           <div class="ins-title">Prediction Sources</div>
           <div class="pred-links">
@@ -806,6 +912,9 @@
           </div>
           <div id="pred-articles"><span class="pred-msg">Loading previews…</span></div>
         </div>`;
+
+      // Async ML prediction
+      fetchMLPrediction(p1.name, p2.name, p1.fullName || p1.name, p2.fullName || p2.name, match.tour);
 
       // Async rankings
       if (id1 && id2) {
