@@ -6,6 +6,7 @@ import urllib.error
 import time
 import gzip
 from html.parser import HTMLParser
+import re
 
 _cache: dict = {}
 CACHE_TTL = 300  # 5 minutes
@@ -88,6 +89,138 @@ def fetch_list_source(list_url: str, filter_terms: list, limit: int = 4) -> list
     parser = ArticleListParser()
     parser.feed(html)
     return filter_articles(parser.articles, filter_terms, limit)
+
+
+def compact_whitespace(text: str) -> str:
+    return re.sub(r'\s+', ' ', (text or '')).strip()
+
+
+def normalize_name_tokens(full_name: str) -> list:
+    parts = [p for p in re.split(r'[^A-Za-z]+', full_name or '') if p]
+    if not parts:
+        return []
+    # First + last names are usually enough for tennis preview mentions.
+    if len(parts) == 1:
+        return [parts[0].lower()]
+    return [parts[0].lower(), parts[-1].lower()]
+
+
+def infer_predicted_winner(text: str, fullname1: str, fullname2: str) -> str:
+    text_lower = (text or '').lower()
+
+    def score_player(full_name: str):
+        score = 0
+        tokens = normalize_name_tokens(full_name)
+        for token in tokens:
+            if not token:
+                continue
+            if re.search(rf'\b{re.escape(token)}\b\s+(?:to win|wins|in \d|is the pick|edges|takes)', text_lower):
+                score += 3
+            if re.search(rf'(?:pick|prediction|expect|backing)\s*[:\-]?\s*[^.\n]{{0,45}}\b{re.escape(token)}\b', text_lower):
+                score += 4
+            score += len(re.findall(rf'\b{re.escape(token)}\b', text_lower))
+        return score
+
+    s1 = score_player(fullname1)
+    s2 = score_player(fullname2)
+    if s1 == 0 and s2 == 0:
+        return ''
+    if s1 == s2:
+        return ''
+    return fullname1 if s1 > s2 else fullname2
+
+
+class ParagraphPredictionParser(HTMLParser):
+    """Extract likely prediction paragraphs from article bodies."""
+
+    KEYWORDS = (
+        'prediction', 'predict', 'pick', 'winner', 'expect', 'should win',
+        'to win', 'in two sets', 'in three sets', 'preview', 'odds',
+    )
+
+    def __init__(self):
+        super().__init__()
+        self.title = ''
+        self.paragraphs = []
+        self._in_title = False
+        self._in_p = False
+        self._buf = []
+
+    def handle_starttag(self, tag, attrs):
+        if tag == 'title':
+            self._in_title = True
+        if tag == 'p':
+            self._in_p = True
+            self._buf = []
+
+    def handle_data(self, data):
+        if self._in_title:
+            self.title += data
+        if self._in_p:
+            self._buf.append(data)
+
+    def handle_endtag(self, tag):
+        if tag == 'title':
+            self._in_title = False
+        if tag == 'p' and self._in_p:
+            text = compact_whitespace(' '.join(self._buf))
+            if len(text) > 35:
+                self.paragraphs.append(text)
+            self._in_p = False
+            self._buf = []
+
+
+def fetch_lwos_predictions(fullname1: str, fullname2: str, tournament: str, limit: int = 3) -> list:
+    """Crawl LWOS tennis index, then article pages, to detect explicit prediction text."""
+    last1 = (fullname1.split()[-1] if fullname1 else '').lower()
+    last2 = (fullname2.split()[-1] if fullname2 else '').lower()
+    filter_terms = [t for t in (last1, last2, (tournament or '').lower()) if t]
+
+    listing = fetch_list_source('https://lastwordonsports.com/tennis/', filter_terms, limit=10)
+    found = []
+
+    for article in listing:
+        if len(found) >= limit:
+            break
+        url = article.get('url', '')
+        if not url:
+            continue
+        try:
+            html = fetch_html(url, timeout=8)
+        except Exception:
+            continue
+
+        parser = ParagraphPredictionParser()
+        parser.feed(html)
+        if not parser.paragraphs:
+            continue
+
+        tokens1 = normalize_name_tokens(fullname1)
+        tokens2 = normalize_name_tokens(fullname2)
+
+        candidates = []
+        for p in parser.paragraphs:
+            lp = p.lower()
+            has_kw = any(kw in lp for kw in ParagraphPredictionParser.KEYWORDS)
+            has_p1 = any(re.search(rf'\b{re.escape(t)}\b', lp) for t in tokens1)
+            has_p2 = any(re.search(rf'\b{re.escape(t)}\b', lp) for t in tokens2)
+            if has_kw and (has_p1 or has_p2):
+                candidates.append(p)
+
+        if not candidates:
+            continue
+
+        snippet = ' … '.join(candidates[:2])[:320]
+        predicted = infer_predicted_winner(' '.join(candidates[:3]), fullname1, fullname2)
+
+        found.append({
+            'title': compact_whitespace(article.get('title') or parser.title.split('|')[0]),
+            'url': url,
+            'snippet': snippet,
+            'predictedWinner': predicted,
+        })
+
+    return found
 
 
 # ── Tennis Tonic H2H content scraper ─────────────────────────────────────────
@@ -232,11 +365,8 @@ class handler(BaseHTTPRequestHandler):
             'articles': gs_articles,
         })
 
-        # 3. Last Word on Sports — tennis section, filtered by player name
-        lwos_articles = fetch_list_source(
-            'https://lastwordonsports.com/tennis/',
-            filter_terms,
-        )
+        # 3. Last Word on Sports — crawl candidate stories and extract prediction text
+        lwos_articles = fetch_lwos_predictions(fullname1, fullname2, tournament)
         results.append({
             'id': 'lwos',
             'name': 'Last Word on Sports',
