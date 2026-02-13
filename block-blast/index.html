@@ -63,19 +63,6 @@
     .score-value.bump { animation: bump .2s ease-out; }
     @keyframes bump { 0%,100%{transform:scale(1)} 50%{transform:scale(1.35)} }
 
-    /* ── Combo banner ── */
-    #combo-banner {
-      height: 22px;
-      margin-bottom: 0.4rem;
-      font-size: 0.8rem;
-      font-weight: 700;
-      color: #fbbf24;
-      text-align: center;
-      opacity: 0;
-      transition: opacity .2s;
-      letter-spacing: .04em;
-    }
-    #combo-banner.show { opacity: 1; }
 
     /* ── Grid ── */
     #grid-wrap {
@@ -206,7 +193,6 @@
   </div>
 </div>
 
-<div id="combo-banner"></div>
 
 <div id="grid-wrap">
   <div id="grid"></div>
@@ -259,15 +245,14 @@ const PIECES = [
   { cells:[[0,1],[1,0],[1,1]],                                                   color:'#34d399' },
 ];
 
-let grid, score, best, linesCleared, streak, pieces, selIdx, hoverR, hoverC, placing;
+let grid, score, best, linesCleared, pieces, selIdx, hoverR, hoverC, placing;
 
 function startGame() {
   grid = Array.from({length: GRID}, () => Array(GRID).fill(null));
-  score = 0; linesCleared = 0; streak = 0;
+  score = 0; linesCleared = 0;
   selIdx = null; hoverR = null; hoverC = null; placing = false;
   best = parseInt(localStorage.getItem('bb_best') || '0');
   document.getElementById('overlay').classList.remove('show');
-  hideComboBanner();
   deal();
   renderGrid();
   updateHUD();
@@ -304,16 +289,6 @@ function setText(id, v) {
   el.classList.remove('bump');
   void el.offsetWidth;
   el.classList.add('bump');
-}
-
-function showComboBanner(n) {
-  const el = document.getElementById('combo-banner');
-  const labels = ['','','DOUBLE!','TRIPLE!','QUAD!','MEGA COMBO!'];
-  el.textContent = labels[Math.min(n, labels.length-1)] || `${n}× COMBO!`;
-  el.classList.add('show');
-}
-function hideComboBanner() {
-  document.getElementById('combo-banner').classList.remove('show');
 }
 
 // ── Grid rendering ────────────────────────────────────────────────────────────
@@ -412,7 +387,6 @@ function drop(r, c) {
 
   placing = true;
   for (const [dr,dc] of p.cells) grid[r+dr][c+dc] = p.color;
-  score += p.cells.length;
   pieces[selIdx] = null;
   selIdx = null;
   renderTray();
@@ -435,15 +409,11 @@ function clearLines(done) {
   for (let c=0; c<GRID; c++) if (grid.every(row=>row[c])) colsToClear.push(c);
 
   const count = rowsToClear.length + colsToClear.length;
-  if (!count) { streak=0; hideComboBanner(); done(); return; }
+  if (!count) { done(); return; }
 
-  streak++;
-  const bonus = streak > 1 ? streak : 1;
-  const pts = count * GRID * 10 * bonus;
-  score += pts;
+  score += count * 100;
   linesCleared += count;
   if (score > best) { best=score; localStorage.setItem('bb_best',best); }
-  if (streak > 1) showComboBanner(streak);
 
   // Flash cells
   const cells = document.querySelectorAll('.cell');
