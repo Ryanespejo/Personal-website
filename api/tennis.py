@@ -34,13 +34,19 @@ def fetch_tour(tour: str) -> list:
             raw = gzip.decompress(raw)
         data = json.loads(raw.decode('utf-8'))
 
-    matches = [m for event in data.get('events', []) if (m := normalize(event, tour))]
+    matches = []
+    for event in data.get('events', []):
+        event_name = event.get('shortName') or event.get('name') or 'Tournament'
+        for grouping in event.get('groupings', []):
+            for comp in grouping.get('competitions', []):
+                m = normalize(comp, tour, event_name)
+                if m:
+                    matches.append(m)
     _cache[tour] = {'ts': now, 'data': matches}
     return matches
 
 
-def normalize(event: dict, tour: str):
-    comp = (event.get('competitions') or [{}])[0]
+def normalize(comp: dict, tour: str, event_name: str = ''):
     competitors = comp.get('competitors') or []
     if len(competitors) < 2:
         return None
@@ -52,13 +58,15 @@ def normalize(event: dict, tour: str):
     is_live = state == 'in'
     is_complete = state == 'post'
 
-    short_name = event.get('shortName') or event.get('name') or 'Match'
-    tournament = f"{tour.upper()} · {short_name}"
+    round_name = (comp.get('round') or {}).get('displayName', '')
+    tournament = f"{tour.upper()} · {event_name}"
+    if round_name:
+        tournament += f" · {round_name}"
 
     players = []
-    for c in sorted(competitors, key=lambda x: 0 if x.get('homeAway') == 'home' else 1):
+    for c in sorted(competitors, key=lambda x: x.get('order', 99)):
         athlete = c.get('athlete') or {}
-        name = athlete.get('displayName') or c.get('name') or 'Player'
+        name = athlete.get('shortName') or athlete.get('displayName') or c.get('name') or 'Player'
         lines = c.get('linescores') or []
         sets = []
         for line in lines:
@@ -76,7 +84,7 @@ def normalize(event: dict, tour: str):
         })
 
     return {
-        'id': event.get('id', ''),
+        'id': comp.get('id', ''),
         'tour': tour,
         'tournament': tournament,
         'status': status,
