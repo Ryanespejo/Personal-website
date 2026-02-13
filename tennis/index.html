@@ -276,25 +276,26 @@
       return { matches: data.matches, source: 'python' };
     }
 
-    function normalizeESPN(event, tour) {
-      const comp = (event.competitions || [{}])[0];
+    function normalizeESPN(comp, tour, eventName) {
       const competitors = comp.competitors || [];
       if (competitors.length < 2) return null;
       const st = comp.status?.type || {};
       const status = st.shortDetail || st.description || 'Scheduled';
       const state = st.state || '';
-      const short = event.shortName || event.name || 'Match';
+      const roundName = comp.round?.displayName || '';
+      let tournament = `${tour.toUpperCase()} · ${eventName}`;
+      if (roundName) tournament += ` · ${roundName}`;
       const players = [...competitors]
-        .sort((a, b) => (a.homeAway === 'home' ? -1 : 1) - (b.homeAway === 'home' ? -1 : 1))
+        .sort((a, b) => (a.order ?? 99) - (b.order ?? 99))
         .map(c => {
-          const name = c.athlete?.displayName || c.name || 'Player';
+          const name = c.athlete?.shortName || c.athlete?.displayName || c.name || 'Player';
           const lines = c.linescores || [];
           const sets = lines.map(l => l.value != null ? String(Math.round(l.value)) : '—');
           const game = String(c.score || '—');
           const serving = !!c.status?.isCurrent;
           return { name, sets, game, serving, winner: !!c.winner };
         });
-      return { tour, tournament: `${tour.toUpperCase()} · ${short}`, status, isLive: state === 'in', isComplete: state === 'post', players };
+      return { tour, tournament, status, isLive: state === 'in', isComplete: state === 'post', players };
     }
 
     async function fetchDirectESPN() {
@@ -302,10 +303,18 @@
         fetch(ESPN.atp).then(r => r.json()),
         fetch(ESPN.wta).then(r => r.json()),
       ]);
-      const matches = [
-        ...(a.events || []).map(e => normalizeESPN(e, 'atp')),
-        ...(w.events || []).map(e => normalizeESPN(e, 'wta')),
-      ].filter(Boolean);
+      const matches = [];
+      for (const [data, tour] of [[a, 'atp'], [w, 'wta']]) {
+        for (const event of data.events || []) {
+          const eventName = event.shortName || event.name || 'Tournament';
+          for (const grouping of event.groupings || []) {
+            for (const comp of grouping.competitions || []) {
+              const m = normalizeESPN(comp, tour, eventName);
+              if (m) matches.push(m);
+            }
+          }
+        }
+      }
       return { matches, source: 'direct' };
     }
 
