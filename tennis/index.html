@@ -732,14 +732,10 @@
     }
 
     async function fetchRankings(tour, id1, id2) {
-      const base = `https://site.api.espn.com/apis/site/v2/sports/tennis/${tour}/athletes`;
-      const ext = (d) => {
-        const a = d?.athlete || d || {};
-        return (a.rankings?.[0]?.current) ?? a.rank ?? null;
-      };
+      const ext = (d) => d?.athlete?.rank ?? null;
       const [r1, r2] = await Promise.all([
-        fetch(`${base}/${id1}`).then(r => r.json()).then(ext).catch(() => null),
-        fetch(`${base}/${id2}`).then(r => r.json()).then(ext).catch(() => null),
+        fetch(`/api/tennis-athlete?tour=${tour}&athleteId=${id1}`).then(r => r.json()).then(ext).catch(() => null),
+        fetch(`/api/tennis-athlete?tour=${tour}&athleteId=${id2}`).then(r => r.json()).then(ext).catch(() => null),
       ]);
       return [r1, r2];
     }
