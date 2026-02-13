@@ -101,15 +101,25 @@ class handler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         params = parse_qs(parsed.query)
 
-        player1 = (params.get('player1') or [''])[0].strip()
-        player2 = (params.get('player2') or [''])[0].strip()
+        player1    = (params.get('player1')    or [''])[0].strip()
+        player2    = (params.get('player2')    or [''])[0].strip()
+        tournament = (params.get('tournament') or [''])[0].strip()
+        year       = (params.get('year')       or [''])[0].strip()
 
-        if not player1 and not player2:
-            self._send_json(400, {'error': 'player1 and/or player2 required'})
+        if not player1 and not player2 and not tournament:
+            self._send_json(400, {'error': 'player1, player2, or tournament required'})
             return
 
-        query = f"{player1} {player2} tennis".strip()
-        cache_key = query.lower()
+        # Primary: tournament + year (sites publish tournament-level previews)
+        # Fallback: player names when no tournament is known
+        if tournament:
+            primary_query   = f"{tournament} {year} tennis predictions".strip()
+            secondary_query = f"{player1} {player2} {tournament} {year} tennis".strip()
+        else:
+            primary_query   = f"{player1} {player2} tennis".strip()
+            secondary_query = None
+
+        cache_key = primary_query.lower()
         now = time.time()
         if cache_key in _cache and now - _cache[cache_key]['ts'] < CACHE_TTL:
             self._send_json(200, _cache[cache_key]['data'])
@@ -117,16 +127,19 @@ class handler(BaseHTTPRequestHandler):
 
         results = []
         for source in SOURCES:
-            articles = fetch_articles(source, query)
+            articles = fetch_articles(source, primary_query)
+            # If primary turned up nothing, try the player-name query
+            if not articles and secondary_query:
+                articles = fetch_articles(source, secondary_query)
             results.append({
                 'id': source['id'],
                 'name': source['name'],
                 'color': source['color'],
-                'searchUrl': source['search_url'].format(urllib.parse.quote_plus(query)),
+                'searchUrl': source['search_url'].format(urllib.parse.quote_plus(primary_query)),
                 'articles': articles,
             })
 
-        response = {'sources': results, 'query': query}
+        response = {'sources': results, 'query': primary_query}
         _cache[cache_key] = {'ts': now, 'data': response}
         self._send_json(200, response)
 
