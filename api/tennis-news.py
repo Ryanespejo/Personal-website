@@ -10,30 +10,28 @@ from html.parser import HTMLParser
 _cache: dict = {}
 CACHE_TTL = 300  # 5 minutes
 
-SOURCES = [
-    {
-        'id': 'tennistonic',
-        'name': 'Tennis Tonic',
-        'search_url': 'https://tennistonic.com/?s={}',
-        'color': '#62f2a6',
-    },
-    {
-        'id': 'grandstand',
-        'name': 'The Grandstand',
-        'search_url': 'https://tenngrand.com/?s={}',
-        'color': '#7dd3fc',
-    },
-    {
-        'id': 'lwos',
-        'name': 'Last Word on Sports',
-        'search_url': 'https://lastwordonsports.com/?s={}',
-        'color': '#f9a8d4',
-    },
-]
+HEADERS = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
+                  '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Accept': 'text/html,application/xhtml+xml,*/*;q=0.9',
+    'Accept-Encoding': 'gzip, deflate',
+    'Accept-Language': 'en-US,en;q=0.9',
+}
 
 
-class ArticleParser(HTMLParser):
-    """Extract article titles + links from WordPress-style search results."""
+def fetch_html(url: str, timeout: int = 7) -> str:
+    req = urllib.request.Request(url, headers=HEADERS)
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        raw = resp.read()
+        if resp.info().get('Content-Encoding') == 'gzip':
+            raw = gzip.decompress(raw)
+        return raw.decode('utf-8', errors='replace')
+
+
+# ── Article list parser (category / section pages) ───────────────────────────
+
+class ArticleListParser(HTMLParser):
+    """Extract article titles + links from WordPress-style listing pages."""
 
     def __init__(self):
         super().__init__()
@@ -71,29 +69,118 @@ class ArticleParser(HTMLParser):
             self._in_heading = False
 
 
-def fetch_articles(source: dict, query: str, limit: int = 4) -> list:
-    encoded = urllib.parse.quote_plus(query)
-    url = source['search_url'].format(encoded)
-    req = urllib.request.Request(
-        url,
-        headers={
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-            'Accept': 'text/html,application/xhtml+xml',
-            'Accept-Encoding': 'gzip, deflate',
-        },
-    )
+def filter_articles(articles: list, terms: list, limit: int = 4) -> list:
+    """Return articles whose title contains any of the search terms."""
+    lower_terms = [t.lower() for t in terms if t]
+    matched = [
+        a for a in articles
+        if any(term in a['title'].lower() for term in lower_terms)
+    ]
+    # Fall back to most recent articles if nothing matched
+    return matched[:limit] if matched else articles[:limit]
+
+
+def fetch_list_source(list_url: str, filter_terms: list, limit: int = 4) -> list:
     try:
-        with urllib.request.urlopen(req, timeout=5) as resp:
-            raw = resp.read()
-            if resp.info().get('Content-Encoding') == 'gzip':
-                raw = gzip.decompress(raw)
-            html = raw.decode('utf-8', errors='replace')
-        parser = ArticleParser()
-        parser.feed(html)
-        return parser.articles[:limit]
+        html = fetch_html(list_url)
+    except Exception:
+        return []
+    parser = ArticleListParser()
+    parser.feed(html)
+    return filter_articles(parser.articles, filter_terms, limit)
+
+
+# ── Tennis Tonic H2H content scraper ─────────────────────────────────────────
+
+class H2HContentParser(HTMLParser):
+    """Extract prediction paragraphs from a Tennis Tonic H2H page."""
+
+    PRED_KEYWORDS = (
+        'prediction', 'predict', 'pick', 'winner', 'expect',
+        'favor', 'favour', 'odds', 'bet', 'tip', 'preview',
+        'should win', 'likely to', 'advantage',
+    )
+
+    def __init__(self, player_terms: list):
+        super().__init__()
+        self.snippets: list = []
+        self.page_title: str = ''
+        self._player_terms = [t.lower() for t in player_terms if t]
+        self._in_content = False
+        self._content_depth = 0
+        self._in_p = False
+        self._p_text: list = []
+        self._in_title = False
+
+    def handle_starttag(self, tag, attrs):
+        attrs_dict = dict(attrs)
+        cls = (attrs_dict.get('class', '') or '').lower()
+        if tag == 'title':
+            self._in_title = True
+        if tag == 'div' and any(kw in cls for kw in (
+            'entry-content', 'post-content', 'article-content',
+            'post-body', 'the-content',
+        )):
+            self._in_content = True
+            self._content_depth = 1
+        elif self._in_content and tag == 'div':
+            self._content_depth += 1
+        if self._in_content and tag == 'p':
+            self._in_p = True
+            self._p_text = []
+
+    def handle_data(self, data):
+        if self._in_title:
+            self.page_title += data
+        if self._in_p:
+            self._p_text.append(data)
+
+    def handle_endtag(self, tag):
+        if tag == 'title':
+            self._in_title = False
+        if self._in_content and tag == 'div':
+            self._content_depth -= 1
+            if self._content_depth <= 0:
+                self._in_content = False
+        if tag == 'p' and self._in_p:
+            text = ' '.join(self._p_text).strip()
+            if len(text) > 40:
+                text_lower = text.lower()
+                has_pred_kw = any(kw in text_lower for kw in self.PRED_KEYWORDS)
+                has_player  = any(t in text_lower for t in self._player_terms)
+                if has_pred_kw or (has_player and len(text) > 80):
+                    self.snippets.append(text[:300])
+            self._in_p = False
+            self._p_text = []
+
+
+def fetch_tennistonic_h2h(fullname1: str, fullname2: str) -> list:
+    """Fetch the Tennis Tonic H2H page and return prediction snippets."""
+    def slugify(n):
+        return n.strip().replace(' ', '-')
+
+    slug = f"{slugify(fullname1)}-Vs-{slugify(fullname2)}"
+    url  = f"https://tennistonic.com/head-to-head-compare/{slug}/"
+
+    try:
+        html = fetch_html(url)
     except Exception:
         return []
 
+    last1 = fullname1.split()[-1] if fullname1 else ''
+    last2 = fullname2.split()[-1] if fullname2 else ''
+    parser = H2HContentParser([last1, last2, fullname1, fullname2])
+    parser.feed(html)
+
+    if not parser.snippets:
+        return []
+
+    title = parser.page_title.split('|')[0].strip() or f"{fullname1} vs {fullname2}"
+    snippet = ' … '.join(parser.snippets[:3])
+    return [{'title': title, 'url': url, 'snippet': snippet}]
+
+
+# ── Request handler ───────────────────────────────────────────────────────────
 
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):
@@ -103,43 +190,61 @@ class handler(BaseHTTPRequestHandler):
 
         player1    = (params.get('player1')    or [''])[0].strip()
         player2    = (params.get('player2')    or [''])[0].strip()
+        fullname1  = (params.get('fullname1')  or [''])[0].strip() or player1
+        fullname2  = (params.get('fullname2')  or [''])[0].strip() or player2
         tournament = (params.get('tournament') or [''])[0].strip()
-        year       = (params.get('year')       or [''])[0].strip()
 
         if not player1 and not player2 and not tournament:
             self._send_json(400, {'error': 'player1, player2, or tournament required'})
             return
 
-        # Primary: tournament + year (sites publish tournament-level previews)
-        # Fallback: player names when no tournament is known
-        if tournament:
-            primary_query   = f"{tournament} {year} tennis predictions".strip()
-            secondary_query = f"{player1} {player2} {tournament} {year} tennis".strip()
-        else:
-            primary_query   = f"{player1} {player2} tennis".strip()
-            secondary_query = None
-
-        cache_key = primary_query.lower()
+        cache_key = f"{fullname1}|{fullname2}|{tournament}".lower()
         now = time.time()
         if cache_key in _cache and now - _cache[cache_key]['ts'] < CACHE_TTL:
             self._send_json(200, _cache[cache_key]['data'])
             return
 
-        results = []
-        for source in SOURCES:
-            articles = fetch_articles(source, primary_query)
-            # If primary turned up nothing, try the player-name query
-            if not articles and secondary_query:
-                articles = fetch_articles(source, secondary_query)
-            results.append({
-                'id': source['id'],
-                'name': source['name'],
-                'color': source['color'],
-                'searchUrl': source['search_url'].format(urllib.parse.quote_plus(primary_query)),
-                'articles': articles,
-            })
+        # Filter terms for list sources: last names + tournament
+        last1 = fullname1.split()[-1] if fullname1 else ''
+        last2 = fullname2.split()[-1] if fullname2 else ''
+        filter_terms = [t for t in [last1, last2, tournament] if t]
 
-        response = {'sources': results, 'query': primary_query}
+        results = []
+
+        # 1. Tennis Tonic H2H — direct structured page
+        tt_articles = fetch_tennistonic_h2h(fullname1, fullname2)
+        results.append({
+            'id': 'tennistonic',
+            'name': 'Tennis Tonic H2H',
+            'color': '#62f2a6',
+            'articles': tt_articles,
+        })
+
+        # 2. The Grandstand — match previews category page, filtered by player name
+        gs_articles = fetch_list_source(
+            'https://tenngrand.com/category/match-previews/',
+            filter_terms,
+        )
+        results.append({
+            'id': 'grandstand',
+            'name': 'The Grandstand',
+            'color': '#7dd3fc',
+            'articles': gs_articles,
+        })
+
+        # 3. Last Word on Sports — tennis section, filtered by player name
+        lwos_articles = fetch_list_source(
+            'https://lastwordonsports.com/tennis/',
+            filter_terms,
+        )
+        results.append({
+            'id': 'lwos',
+            'name': 'Last Word on Sports',
+            'color': '#f9a8d4',
+            'articles': lwos_articles,
+        })
+
+        response = {'sources': results}
         _cache[cache_key] = {'ts': now, 'data': response}
         self._send_json(200, response)
 

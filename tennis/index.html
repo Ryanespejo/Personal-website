@@ -309,6 +309,11 @@
     .pred-article:last-child { border-bottom: none; }
     .pred-article-title { font-size: 0.79rem; color: var(--text); text-decoration: none; line-height: 1.45; display: block; }
     .pred-article-title:hover { color: var(--accent); }
+    .pred-snippet {
+      font-size: 0.74rem; color: var(--muted); line-height: 1.55;
+      margin-top: 0.3rem; display: -webkit-box; -webkit-line-clamp: 4;
+      -webkit-box-orient: vertical; overflow: hidden;
+    }
     .pred-source-label { font-size: 0.64rem; color: var(--muted); margin-top: 0.18rem; letter-spacing: 0.02em; }
     .pred-msg { font-size: 0.75rem; color: var(--muted); font-style: italic; }
 
@@ -673,16 +678,19 @@
       return siteLinks + xLink;
     }
 
-    async function fetchPredictions(name1, name2, tournament, year) {
+    async function fetchPredictions(name1, name2, fullName1, fullName2, tournament, year) {
       const el = document.getElementById('pred-articles');
       if (!el) return;
       try {
-        const p1 = encodeURIComponent(name1);
-        const p2 = encodeURIComponent(name2);
-        const t  = encodeURIComponent(tournament || '');
-        const y  = encodeURIComponent(year || '');
-        const res = await fetch(`/api/tennis-news?player1=${p1}&player2=${p2}&tournament=${t}&year=${y}`,
-                                { signal: AbortSignal.timeout(10000) });
+        const p1  = encodeURIComponent(name1);
+        const p2  = encodeURIComponent(name2);
+        const fn1 = encodeURIComponent(fullName1 || name1);
+        const fn2 = encodeURIComponent(fullName2 || name2);
+        const t   = encodeURIComponent(tournament || '');
+        const y   = encodeURIComponent(year || '');
+        const res = await fetch(
+          `/api/tennis-news?player1=${p1}&player2=${p2}&fullname1=${fn1}&fullname2=${fn2}&tournament=${t}&year=${y}`,
+          { signal: AbortSignal.timeout(12000) });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
         const articles = (data.sources || []).flatMap(s =>
@@ -696,6 +704,7 @@
         el.innerHTML = articles.map(a => `
           <div class="pred-article">
             <a class="pred-article-title" href="${a.url}" target="_blank" rel="noopener">${a.title}</a>
+            ${a.snippet ? `<p class="pred-snippet">${a.snippet}</p>` : ''}
             <div class="pred-source-label" style="color:${a.sourceColor}">${a.sourceName}</div>
           </div>`).join('');
       } catch (_) {
@@ -836,7 +845,7 @@
       }
 
       // Async predictions
-      fetchPredictions(p1.name, p2.name, match.tournamentName, (match.date || '').slice(0, 4));
+      fetchPredictions(p1.name, p2.name, p1.fullName || p1.name, p2.fullName || p2.name, match.tournamentName, (match.date || '').slice(0, 4));
 
       // On mobile scroll down to insights
       if (window.innerWidth <= 920) {
