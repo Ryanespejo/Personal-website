@@ -524,9 +524,9 @@
 
     // ── Tournament dropdown ───────────────────────────────────────────────────
 
-    // A player "name" that contains " vs " is a match summary, not a real name — skip it
+    // A player "name" that contains " vs " or " v " is a match summary, not a real name — skip it
     function isValidPlayerName(name) {
-      return !/ vs /i.test(name);
+      return !/ vs\.? /i.test(name) && !/ v /i.test(name);
     }
 
     function updateTournSelect(matches) {
