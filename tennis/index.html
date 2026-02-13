@@ -445,12 +445,7 @@
       const roundName = comp.round?.displayName || '';
       let tournament = `${tour.toUpperCase()} · ${eventName}`;
       if (roundName) tournament += ` · ${roundName}`;
-      const allSorted = [...competitors].sort((a, b) => (a.order ?? 99) - (b.order ?? 99));
-      // Drop "A vs B" summary entries ESPN sometimes includes alongside real player entries
-      const sorted = allSorted.filter(c => !/ vs /i.test(
-        c.athlete?.shortName || c.athlete?.displayName || c.name || ''
-      ));
-      if (sorted.length < 2) return null;
+      const sorted = [...competitors].sort((a, b) => (a.order ?? 99) - (b.order ?? 99));
       const players = sorted.map(c => ({
         name:     c.athlete?.shortName || c.athlete?.displayName || c.roster?.shortDisplayName || c.roster?.displayName || c.name || 'Player',
         fullName: c.athlete?.displayName || c.athlete?.shortName || c.roster?.displayName || c.roster?.shortDisplayName || c.name || 'Player',
@@ -529,17 +524,9 @@
 
     // ── Tournament dropdown ───────────────────────────────────────────────────
 
-    // A player "name" that contains " vs " is a match summary, not a real name — skip it
-    function isValidPlayerName(name) {
-      return !/ vs /i.test(name);
-    }
-
     function updateTournSelect(matches) {
-      // Scope tournament list to whichever tour is active
       const scoped = tourFilter === 'all' ? matches : matches.filter(m => m.tour === tourFilter);
-      // Only include matches with real player names
-      const valid = scoped.filter(m => m.players.every(p => isValidPlayerName(p.name)));
-      const tournaments = [...new Set(valid.map(m => m.tournamentName).filter(Boolean))].sort();
+      const tournaments = [...new Set(scoped.map(m => m.tournamentName).filter(Boolean))].sort();
       const prev = TOURN_SEL.value;
       TOURN_SEL.innerHTML = '<option value="">All Tournaments</option>' +
         tournaments.map(t => `<option value="${t}"${prev === t ? ' selected' : ''}>${t}</option>`).join('');
