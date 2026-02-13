@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tennis Live | Ryan Espejo</title>
+  <style>
+    :root {
+      --bg: #07090f;
+      --panel: #111625;
+      --panel-soft: #171d2f;
+      --line: #252d45;
+      --text: #f4f7ff;
+      --muted: #9ba7c6;
+      --accent: #62f2a6;
+      --accent-soft: rgba(98, 242, 166, 0.14);
+      --danger: #ff6a7b;
+      --gold: #ffcf6b;
+      --gold-soft: rgba(255, 207, 107, 0.14);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background:
+        radial-gradient(circle at top right, #1c2b5f 0%, transparent 40%),
+        radial-gradient(circle at bottom left, #193838 0%, transparent 35%),
+        var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 2rem 1.25rem 3rem;
+    }
+
+    .app { max-width: 1100px; margin: 0 auto; display: grid; gap: 1.25rem; }
+
+    /* ── Top bar ── */
+    .topbar { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; }
+    .brand h1 { font-size: clamp(1.35rem, 3vw, 2rem); letter-spacing: 0.01em; }
+    .brand p { color: var(--muted); font-size: 0.9rem; margin-top: 0.25rem; }
+    .home-link {
+      text-decoration: none; color: var(--text); border: 1px solid var(--line);
+      background: var(--panel); padding: 0.55rem 0.95rem; border-radius: 999px;
+      font-size: 0.85rem; transition: 0.2s ease;
+    }
+    .home-link:hover { border-color: var(--accent); color: var(--accent); }
+
+    /* ── Source pill ── */
+    .source-pill {
+      font-size: 0.72rem; padding: 0.2rem 0.6rem; border-radius: 999px;
+      letter-spacing: 0.04em; text-transform: uppercase; border: 1px solid transparent;
+      display: inline-flex; align-items: center; gap: 0.35rem;
+    }
+    .source-pill.python { color: #7dd3fc; border-color: rgba(125,211,252,0.35); background: rgba(125,211,252,0.1); }
+    .source-pill.direct { color: var(--gold); border-color: rgba(255,207,107,0.35); background: var(--gold-soft); }
+    .source-pill.fallback { color: var(--danger); border-color: rgba(255,106,123,0.35); background: rgba(255,106,123,0.1); }
+
+    /* ── Filters ── */
+    .filters { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+    .chip {
+      border: 1px solid var(--line); background: var(--panel); color: var(--muted);
+      border-radius: 999px; padding: 0.4rem 0.85rem; font-size: 0.8rem;
+      letter-spacing: 0.03em; text-transform: uppercase; cursor: pointer; transition: 0.2s;
+    }
+    .chip.active { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+
+    /* ── Countdown ── */
+    .countdown {
+      margin-left: auto; display: flex; align-items: center; gap: 0.45rem;
+      color: var(--muted); font-size: 0.8rem;
+    }
+    .countdown-ring { width: 22px; height: 22px; }
+    .countdown-ring circle {
+      fill: none; stroke: var(--line); stroke-width: 3;
+      transform-origin: 50% 50%; transform: rotate(-90deg);
+    }
+    .countdown-ring circle.progress {
+      stroke: var(--accent); stroke-linecap: round;
+      transition: stroke-dashoffset 0.9s linear;
+    }
+
+    /* ── Layout ── */
+    .layout { display: grid; grid-template-columns: 1.3fr 0.7fr; gap: 1rem; }
+    .panel {
+      background: linear-gradient(180deg, var(--panel-soft), var(--panel));
+      border: 1px solid var(--line); border-radius: 16px; overflow: hidden;
+    }
+    .panel-header {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 0.9rem 1rem; border-bottom: 1px solid var(--line);
+    }
+    .panel-header h2 { font-size: 0.9rem; letter-spacing: 0.03em; text-transform: uppercase; color: var(--muted); }
+
+    /* ── Live dot ── */
+    .dot {
+      width: 8px; height: 8px; border-radius: 50%; display: inline-block;
+      background: var(--accent); box-shadow: 0 0 0 5px rgba(98, 242, 166, 0.15);
+      margin-right: 0.4rem; transform: translateY(1px);
+      animation: pulse 2s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { box-shadow: 0 0 0 5px rgba(98, 242, 166, 0.15); }
+      50% { box-shadow: 0 0 0 9px rgba(98, 242, 166, 0.05); }
+    }
+
+    /* ── Match cards ── */
+    .matches { display: grid; }
+    .match { padding: 1rem; border-bottom: 1px solid var(--line); transition: background 0.2s; }
+    .match:last-child { border-bottom: 0; }
+    .match:hover { background: rgba(255,255,255,0.02); }
+
+    .match-meta {
+      display: flex; justify-content: space-between; align-items: center;
+      color: var(--muted); font-size: 0.76rem; text-transform: uppercase;
+      letter-spacing: 0.04em; margin-bottom: 0.7rem; gap: 0.5rem; flex-wrap: wrap;
+    }
+    .match-meta .tourn { flex: 1; }
+
+    /* Status badges */
+    .badge {
+      font-size: 0.68rem; padding: 0.18rem 0.5rem; border-radius: 999px;
+      letter-spacing: 0.06em; text-transform: uppercase; white-space: nowrap;
+    }
+    .badge-live { color: var(--accent); background: var(--accent-soft); border: 1px solid rgba(98,242,166,0.4); }
+    .badge-final { color: var(--muted); background: rgba(155,167,198,0.1); border: 1px solid rgba(155,167,198,0.3); }
+    .badge-scheduled { color: var(--gold); background: var(--gold-soft); border: 1px solid rgba(255,207,107,0.35); }
+
+    /* Player rows */
+    .players { display: grid; gap: 0.45rem; }
+    .row {
+      display: grid;
+      grid-template-columns: 1.5rem 1fr repeat(var(--sets, 2), 1.8rem) 2.4rem;
+      gap: 0.4rem; align-items: center; font-size: 0.93rem;
+    }
+    .serve-dot {
+      width: 8px; height: 8px; border-radius: 50%; background: var(--accent);
+      justify-self: center;
+    }
+    .serve-dot.hidden { visibility: hidden; }
+    .pname { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .pname.winner { color: var(--accent); }
+    .set-score {
+      min-width: 1.8rem; text-align: center; border-radius: 6px;
+      border: 1px solid var(--line); padding: 0.15rem 0.2rem;
+      color: #dce4ff; font-variant-numeric: tabular-nums; font-size: 0.88rem;
+    }
+    .set-score.won { border-color: rgba(98,242,166,0.5); background: rgba(98,242,166,0.08); color: var(--accent); }
+    .game-score {
+      min-width: 2.4rem; text-align: center; border-radius: 6px;
+      border: 1px solid rgba(98,242,166,0.4); background: rgba(98,242,166,0.08);
+      color: var(--accent); font-variant-numeric: tabular-nums; font-size: 0.88rem;
+      padding: 0.15rem 0.2rem;
+    }
+
+    /* ── Status / empty states ── */
+    .status-msg { color: var(--muted); font-size: 0.85rem; padding: 1.2rem 1rem; border-bottom: 1px solid var(--line); }
+    .updated-at { color: var(--muted); font-size: 0.75rem; padding: 0.6rem 1rem; }
+    .live-count { font-size: 0.78rem; padding: 0.2rem 0.55rem; border-radius: 999px; letter-spacing: 0.04em; }
+
+    /* ── Sidebar ── */
+    .info-list { padding: 0.5rem 0.9rem 1rem; display: grid; gap: 0.6rem; }
+    .info-card {
+      border: 1px solid var(--line); border-radius: 12px; padding: 0.8rem 0.9rem;
+      display: grid; gap: 0.4rem; background: rgba(16,20,34,0.6);
+    }
+    .info-card-title {
+      display: flex; justify-content: space-between; color: var(--muted);
+      font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.04em;
+    }
+    .info-card-body { display: flex; justify-content: space-between; font-size: 0.82rem; color: #b0b8d0; }
+
+    @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <section class="topbar">
+      <div class="brand">
+        <h1>Tennis Live Center</h1>
+        <p id="subtitle">Connecting to live feed…</p>
+      </div>
+      <a class="home-link" href="/">&larr; Back home</a>
+    </section>
+
+    <section class="filters" aria-label="tour filters">
+      <button class="chip active" data-tour="all">All</button>
+      <button class="chip" data-tour="atp">ATP</button>
+      <button class="chip" data-tour="wta">WTA</button>
+      <div class="countdown" id="countdown-wrap" style="display:none">
+        <svg class="countdown-ring" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="9"/>
+          <circle class="progress" id="countdown-ring" cx="12" cy="12" r="9"
+            stroke-dasharray="56.5" stroke-dashoffset="0"/>
+        </svg>
+        <span id="countdown-label">30s</span>
+        <span id="source-pill"></span>
+      </div>
+    </section>
+
+    <section class="layout">
+      <article class="panel">
+        <header class="panel-header">
+          <h2><span class="dot"></span>Live &amp; Recent</h2>
+          <span class="live-count badge badge-live" id="live-count">—</span>
+        </header>
+        <div class="status-msg" id="status-msg">Fetching scoreboard…</div>
+        <div class="matches" id="matches"></div>
+        <div class="updated-at" id="updated-at"></div>
+      </article>
+
+      <aside class="panel">
+        <header class="panel-header">
+          <h2>How this works</h2>
+        </header>
+        <div class="info-list">
+          <div class="info-card">
+            <div class="info-card-title"><span>Data source</span><span>ESPN</span></div>
+            <div class="info-card-body"><span>ATP + WTA scoreboards</span><span>public API</span></div>
+          </div>
+          <div class="info-card">
+            <div class="info-card-title"><span>Backend</span><span>Python</span></div>
+            <div class="info-card-body"><span>Vercel serverless fn</span><span>/api/tennis</span></div>
+          </div>
+          <div class="info-card">
+            <div class="info-card-title"><span>Refresh rate</span><span>30s</span></div>
+            <div class="info-card-body"><span>Auto-polling</span><span>countdown shown</span></div>
+          </div>
+          <div class="info-card">
+            <div class="info-card-title"><span>Fallback</span><span>2-tier</span></div>
+            <div class="info-card-body"><span>Python → direct ESPN → sample</span></div>
+          </div>
+        </div>
+      </aside>
+    </section>
+  </main>
+
+  <script>
+    const MATCHES_EL  = document.getElementById('matches');
+    const STATUS_MSG  = document.getElementById('status-msg');
+    const UPDATED_AT  = document.getElementById('updated-at');
+    const LIVE_COUNT  = document.getElementById('live-count');
+    const SUBTITLE    = document.getElementById('subtitle');
+    const SOURCE_PILL = document.getElementById('source-pill');
+    const CDW         = document.getElementById('countdown-wrap');
+    const CDL         = document.getElementById('countdown-label');
+    const CDR         = document.getElementById('countdown-ring');
+
+    const chips = [...document.querySelectorAll('.chip')];
+
+    const ESPN = {
+      atp: 'https://site.api.espn.com/apis/site/v2/sports/tennis/atp/scoreboard',
+      wta: 'https://site.api.espn.com/apis/site/v2/sports/tennis/wta/scoreboard',
+    };
+
+    const FALLBACK = [
+      { tour:'atp', tournament:'ATP · Sample Match', status:'Set 3 · 5-4', isLive:true, isComplete:false,
+        players:[{name:'C. Alcaraz',sets:['6','3','5'],game:'40',serving:true,winner:false},{name:'L. Musetti',sets:['4','6','4'],game:'30',serving:false,winner:false}] },
+      { tour:'wta', tournament:'WTA · Sample Match', status:'Set 2 · 2-1', isLive:true, isComplete:false,
+        players:[{name:'I. Swiatek',sets:['6','2'],game:'Ad',serving:true,winner:false},{name:'D. Kasatkina',sets:['1','1'],game:'40',serving:false,winner:false}] },
+    ];
+
+    const REFRESH_SEC = 30;
+    let cachedMatches = [];
+    let currentFilter = 'all';
+    let countdown = REFRESH_SEC;
+    let countdownTimer = null;
+    const CIRCUMFERENCE = 56.5;
+
+    // ── Fetch logic ──────────────────────────────────────────────────────────
+
+    async function fetchFromPython() {
+      const res = await fetch('/api/tennis', { signal: AbortSignal.timeout(8000) });
+      if (!res.ok) throw new Error(`api/tennis returned ${res.status}`);
+      const data = await res.json();
+      if (!Array.isArray(data.matches)) throw new Error('Unexpected payload');
+      return { matches: data.matches, source: 'python' };
+    }
+
+    function normalizeESPN(event, tour) {
+      const comp = (event.competitions || [{}])[0];
+      const competitors = comp.competitors || [];
+      if (competitors.length < 2) return null;
+      const st = comp.status?.type || {};
+      const status = st.shortDetail || st.description || 'Scheduled';
+      const state = st.state || '';
+      const short = event.shortName || event.name || 'Match';
+      const players = [...competitors]
+        .sort((a, b) => (a.homeAway === 'home' ? -1 : 1) - (b.homeAway === 'home' ? -1 : 1))
+        .map(c => {
+          const name = c.athlete?.displayName || c.name || 'Player';
+          const lines = c.linescores || [];
+          const sets = lines.map(l => l.value != null ? String(Math.round(l.value)) : '—');
+          const game = String(c.score || '—');
+          const serving = !!c.status?.isCurrent;
+          return { name, sets, game, serving, winner: !!c.winner };
+        });
+      return { tour, tournament: `${tour.toUpperCase()} · ${short}`, status, isLive: state === 'in', isComplete: state === 'post', players };
+    }
+
+    async function fetchDirectESPN() {
+      const [a, w] = await Promise.all([
+        fetch(ESPN.atp).then(r => r.json()),
+        fetch(ESPN.wta).then(r => r.json()),
+      ]);
+      const matches = [
+        ...(a.events || []).map(e => normalizeESPN(e, 'atp')),
+        ...(w.events || []).map(e => normalizeESPN(e, 'wta')),
+      ].filter(Boolean);
+      return { matches, source: 'direct' };
+    }
+
+    async function loadMatches() {
+      try {
+        const result = await fetchFromPython();
+        return result;
+      } catch (_) {
+        try {
+          return await fetchDirectESPN();
+        } catch (__) {
+          return { matches: FALLBACK, source: 'fallback' };
+        }
+      }
+    }
+
+    // ── Render ───────────────────────────────────────────────────────────────
+
+    function badgeHtml(match) {
+      if (match.isLive)     return '<span class="badge badge-live">Live</span>';
+      if (match.isComplete) return '<span class="badge badge-final">Final</span>';
+      return '<span class="badge badge-scheduled">Upcoming</span>';
+    }
+
+    function renderMatch(match) {
+      const maxSets = Math.max(...match.players.map(p => p.sets.length), 2);
+      const setHeaders = Array.from({ length: maxSets }, (_, i) => `S${i + 1}`);
+
+      const playerRows = match.players.map(p => {
+        const serveDot = `<span class="serve-dot${p.serving ? '' : ' hidden'}"></span>`;
+        const setScores = Array.from({ length: maxSets }, (_, i) => {
+          const val = p.sets[i] ?? '—';
+          const myVal = parseInt(val, 10);
+          const oppVal = parseInt(match.players.find(x => x !== p)?.sets[i] ?? '0', 10);
+          const won = !isNaN(myVal) && !isNaN(oppVal) && myVal > oppVal;
+          return `<span class="set-score${won ? ' won' : ''}">${val}</span>`;
+        }).join('');
+        const winner = p.winner || (!match.isLive && !match.isComplete ? false : p.winner);
+        return `
+          <div class="row" style="--sets:${maxSets}">
+            ${serveDot}
+            <span class="pname${winner ? ' winner' : ''}">${p.name}</span>
+            ${setScores}
+            <span class="game-score">${match.isComplete ? '' : p.game}</span>
+          </div>`;
+      }).join('');
+
+      return `
+        <div class="match" data-tour="${match.tour}">
+          <div class="match-meta">
+            <span class="tourn">${match.tournament}</span>
+            <span>${match.status}</span>
+            ${badgeHtml(match)}
+          </div>
+          <div class="players">${playerRows}</div>
+        </div>`;
+    }
+
+    function renderAll(matches) {
+      const filtered = currentFilter === 'all' ? matches : matches.filter(m => m.tour === currentFilter);
+      if (!filtered.length) {
+        MATCHES_EL.innerHTML = '<div class="status-msg">No matches for this filter right now.</div>';
+      } else {
+        MATCHES_EL.innerHTML = filtered.map(renderMatch).join('');
+      }
+      const live = matches.filter(m => m.isLive).length;
+      LIVE_COUNT.textContent = live ? `${live} Live` : `${matches.length} matches`;
+    }
+
+    // ── Refresh cycle ────────────────────────────────────────────────────────
+
+    function setSourcePill(source) {
+      const labels = { python: '🐍 Python backend', direct: 'ESPN direct', fallback: 'Sample data' };
+      const cls = { python: 'python', direct: 'direct', fallback: 'fallback' };
+      SOURCE_PILL.className = `source-pill ${cls[source] || 'direct'}`;
+      SOURCE_PILL.textContent = labels[source] || source;
+    }
+
+    function startCountdown() {
+      countdown = REFRESH_SEC;
+      CDW.style.display = 'flex';
+      clearInterval(countdownTimer);
+      countdownTimer = setInterval(() => {
+        countdown--;
+        const frac = countdown / REFRESH_SEC;
+        CDR.style.strokeDashoffset = CIRCUMFERENCE * (1 - frac);
+        CDL.textContent = `${countdown}s`;
+        if (countdown <= 0) {
+          clearInterval(countdownTimer);
+          refresh();
+        }
+      }, 1000);
+    }
+
+    async function refresh() {
+      STATUS_MSG.textContent = 'Refreshing…';
+      STATUS_MSG.style.display = 'block';
+      try {
+        const { matches, source } = await loadMatches();
+        cachedMatches = matches;
+        renderAll(matches);
+        setSourcePill(source);
+        const isFallback = source === 'fallback';
+        STATUS_MSG.textContent = isFallback ? 'Live feed unavailable — showing sample matches.' : 'Feed connected.';
+        SUBTITLE.textContent = isFallback
+          ? 'Showing sample data'
+          : `${source === 'python' ? 'Python backend' : 'ESPN direct'} · auto-refresh 30s`;
+        UPDATED_AT.textContent = `Updated ${new Date().toLocaleTimeString()}`;
+        if (!isFallback) setTimeout(() => { STATUS_MSG.style.display = 'none'; }, 2000);
+      } catch (err) {
+        STATUS_MSG.textContent = `Error: ${err.message}`;
+      }
+      startCountdown();
+    }
+
+    chips.forEach(c => c.addEventListener('click', () => {
+      currentFilter = c.dataset.tour;
+      chips.forEach(x => x.classList.toggle('active', x === c));
+      renderAll(cachedMatches);
+    }));
+
+    refresh();
+  </script>
+</body>
+</html>
