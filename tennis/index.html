@@ -77,6 +77,34 @@
     .chip.chip-live.active .live-dot { animation: blink 1.2s ease-in-out infinite; }
     @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
 
+    /* ── Tournament dropdown ── */
+    .tourn-select {
+      background: var(--panel);
+      color: var(--muted);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 0.38rem 1.9rem 0.38rem 0.8rem;
+      font-size: 0.78rem;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+      font-family: inherit;
+      cursor: pointer;
+      outline: none;
+      -webkit-appearance: none;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%239ba7c6'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 0.65rem center;
+      background-size: 8px 5px;
+      transition: border-color 0.15s, color 0.15s;
+      max-width: 200px;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .tourn-select:hover { border-color: var(--accent); color: var(--accent); }
+    .tourn-select:focus { border-color: var(--accent); outline: none; }
+    .tourn-select option { background: #111625; color: #f4f7ff; text-transform: none; letter-spacing: 0; }
+
     /* ── Countdown ── */
     .countdown {
       margin-left: auto; display: flex; align-items: center; gap: 0.45rem;
@@ -307,6 +335,9 @@
       <button class="chip" data-tour="atp">ATP</button>
       <button class="chip" data-tour="wta">WTA</button>
       <button class="chip chip-live" id="btn-live"><span class="live-dot"></span>Live</button>
+      <select id="tourn-select" class="tourn-select">
+        <option value="">All Tournaments</option>
+      </select>
       <div class="countdown" id="countdown-wrap" style="display:none">
         <svg class="countdown-ring" viewBox="0 0 24 24">
           <circle cx="12" cy="12" r="9"/>
@@ -362,6 +393,7 @@
     const DATE_ROW    = document.getElementById('date-row');
     const INSIGHTS    = document.getElementById('insights-body');
     const BTN_LIVE    = document.getElementById('btn-live');
+    const TOURN_SEL   = document.getElementById('tourn-select');
 
     const tourChips = [...document.querySelectorAll('.chip[data-tour]')];
 
@@ -380,11 +412,12 @@
 
     const REFRESH_SEC  = 30;
     const CIRCUMFERENCE = 56.5;
-    let cachedMatches = [];
-    let tourFilter    = 'all';
-    let liveOnly      = false;
-    let dateFilter    = null;
-    let selectedId    = null;
+    let cachedMatches    = [];
+    let tourFilter       = 'all';
+    let liveOnly         = false;
+    let dateFilter       = null;
+    let tournamentFilter = '';
+    let selectedId       = null;
     let countdown     = REFRESH_SEC;
     let countdownTimer = null;
 
@@ -483,6 +516,28 @@
       );
     }
 
+    // ── Tournament dropdown ───────────────────────────────────────────────────
+
+    // A player "name" that contains " vs " is a match summary, not a real name — skip it
+    function isValidPlayerName(name) {
+      return !/ vs /i.test(name);
+    }
+
+    function updateTournSelect(matches) {
+      // Scope tournament list to whichever tour is active
+      const scoped = tourFilter === 'all' ? matches : matches.filter(m => m.tour === tourFilter);
+      // Only include matches with real player names
+      const valid = scoped.filter(m => m.players.every(p => isValidPlayerName(p.name)));
+      const tournaments = [...new Set(valid.map(m => m.tournamentName).filter(Boolean))].sort();
+      const prev = TOURN_SEL.value;
+      TOURN_SEL.innerHTML = '<option value="">All Tournaments</option>' +
+        tournaments.map(t => `<option value="${t}"${prev === t ? ' selected' : ''}>${t}</option>`).join('');
+      // If the previously selected tournament no longer exists in this scope, reset
+      if (prev && !tournaments.includes(prev)) {
+        tournamentFilter = '';
+      }
+    }
+
     // ── Render ────────────────────────────────────────────────────────────────
 
     function badgeHtml(m) {
@@ -524,9 +579,12 @@
 
     function renderAll(matches) {
       let filtered = matches;
-      if (tourFilter !== 'all') filtered = filtered.filter(m => m.tour === tourFilter);
-      if (liveOnly)             filtered = filtered.filter(m => m.isLive);
-      if (dateFilter)           filtered = filtered.filter(m => m.date === dateFilter);
+      // Drop entries where any "player" name is really a "A vs B" string
+      filtered = filtered.filter(m => m.players.every(p => isValidPlayerName(p.name)));
+      if (tourFilter !== 'all')  filtered = filtered.filter(m => m.tour === tourFilter);
+      if (liveOnly)              filtered = filtered.filter(m => m.isLive);
+      if (dateFilter)            filtered = filtered.filter(m => m.date === dateFilter);
+      if (tournamentFilter)      filtered = filtered.filter(m => m.tournamentName === tournamentFilter);
 
       const liveN = matches.filter(m => m.isLive).length;
       LIVE_COUNT.textContent = liveN ? `${liveN} Live` : `${matches.length} total`;
@@ -815,6 +873,7 @@
         const { matches, source } = await loadMatches();
         cachedMatches = matches;
         updateDateChips(matches);
+        updateTournSelect(matches);
         renderAll(matches);
         setSourcePill(source);
         const isFallback = source === 'fallback';
@@ -838,9 +897,16 @@
 
     tourChips.forEach(c => c.addEventListener('click', () => {
       tourFilter = c.dataset.tour;
+      tournamentFilter = ''; // reset tournament filter when changing tour
       tourChips.forEach(x => x.classList.toggle('active', x === c));
+      updateTournSelect(cachedMatches);
       renderAll(cachedMatches);
     }));
+
+    TOURN_SEL.addEventListener('change', () => {
+      tournamentFilter = TOURN_SEL.value;
+      renderAll(cachedMatches);
+    });
 
     BTN_LIVE.addEventListener('click', () => {
       liveOnly = !liveOnly;
