@@ -90,6 +90,33 @@ def normalize(comp: dict, tour: str, event_name: str = ''):
             'winner': bool(c.get('winner')),
         })
 
+    # Optional sportsbook / event metadata (availability varies by tournament)
+    odds_list = comp.get('odds') or []
+    odds_obj = odds_list[0] if odds_list else {}
+
+    broadcasts = []
+    for b in (comp.get('broadcasts') or []):
+        if b.get('names'):
+            broadcasts.extend([n for n in b.get('names', []) if n])
+
+    venue = comp.get('venue') or {}
+    geo = venue.get('address') or {}
+
+    # Build player-specific odds map where ESPN includes it on competitors
+    odds_by_player = {}
+    for c in sorted_competitors:
+        cid = str(c.get('id', ''))
+        co = c.get('odds') or {}
+        if not cid or not co:
+            continue
+        odds_by_player[cid] = {
+            'favorite': co.get('favorite'),
+            'underdog': co.get('underdog'),
+            'current': co.get('current'),
+            'open': co.get('open'),
+            'close': co.get('close'),
+        }
+
     return {
         'id': comp.get('id', ''),
         'tour': tour,
@@ -102,6 +129,26 @@ def normalize(comp: dict, tour: str, event_name: str = ''):
         'isLive': is_live,
         'isComplete': is_complete,
         'players': players,
+        'odds': {
+            'details': odds_obj.get('details', ''),
+            'overUnder': odds_obj.get('overUnder'),
+            'provider': (odds_obj.get('provider') or {}).get('name', ''),
+            'spread': odds_obj.get('spread'),
+            'moneyline': odds_obj.get('moneyline'),
+        },
+        'oddsByPlayer': odds_by_player,
+        'broadcasts': sorted(set(broadcasts)),
+        'venue': {
+            'name': venue.get('fullName', ''),
+            'city': geo.get('city', ''),
+            'state': geo.get('state', ''),
+            'country': geo.get('country', ''),
+            'indoor': venue.get('indoor'),
+        },
+        'attendance': comp.get('attendance'),
+        'neutralSite': comp.get('neutralSite'),
+        'notes': comp.get('notes') or [],
+        'links': comp.get('links') or [],
     }
 
 
