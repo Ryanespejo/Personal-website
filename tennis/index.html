@@ -452,8 +452,8 @@
       ));
       if (sorted.length < 2) return null;
       const players = sorted.map(c => ({
-        name:     c.athlete?.shortName || c.athlete?.displayName || c.name || 'Player',
-        fullName: c.athlete?.displayName || c.athlete?.shortName || c.name || 'Player',
+        name:     c.athlete?.shortName || c.athlete?.displayName || c.roster?.shortDisplayName || c.roster?.displayName || c.name || 'Player',
+        fullName: c.athlete?.displayName || c.athlete?.shortName || c.roster?.displayName || c.roster?.shortDisplayName || c.name || 'Player',
         sets: (c.linescores || []).map(l => l.value != null ? String(Math.round(l.value)) : '—'),
         game: String(c.score || '—'),
         serving: !!c.status?.isCurrent,
