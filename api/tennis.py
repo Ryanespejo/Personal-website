@@ -63,8 +63,12 @@ def normalize(comp: dict, tour: str, event_name: str = ''):
     if round_name:
         tournament += f" · {round_name}"
 
+    date_str = (comp.get('startDate') or comp.get('date') or '')[:10]
+    sorted_competitors = sorted(competitors, key=lambda x: x.get('order', 99))
+    player_ids = [str(c.get('id', '')) for c in sorted_competitors]
+
     players = []
-    for c in sorted(competitors, key=lambda x: x.get('order', 99)):
+    for c in sorted_competitors:
         athlete = c.get('athlete') or {}
         name = athlete.get('shortName') or athlete.get('displayName') or c.get('name') or 'Player'
         lines = c.get('linescores') or []
@@ -86,7 +90,11 @@ def normalize(comp: dict, tour: str, event_name: str = ''):
     return {
         'id': comp.get('id', ''),
         'tour': tour,
+        'tournamentName': event_name,
+        'round': round_name,
         'tournament': tournament,
+        'date': date_str,
+        'playerIds': player_ids,
         'status': status,
         'isLive': is_live,
         'isComplete': is_complete,
