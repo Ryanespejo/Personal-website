@@ -264,10 +264,31 @@
     .rank-num { font-size: 1.05rem; font-weight: 700; color: var(--gold); }
     .rank-msg { font-size: 0.76rem; color: var(--muted); font-style: italic; }
 
+    /* ── Prediction sources ── */
+    .insights-scroll { overflow-y: auto; max-height: calc(100vh - 5rem); scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+    .insights-scroll::-webkit-scrollbar { width: 4px; }
+    .insights-scroll::-webkit-scrollbar-thumb { background: var(--line); border-radius: 99px; }
+
+    .pred-links { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 0.6rem; }
+    .pred-link {
+      font-size: 0.72rem; padding: 0.28rem 0.65rem; border-radius: 999px;
+      text-decoration: none; border: 1px solid; transition: opacity 0.15s, transform 0.1s;
+      display: inline-flex; align-items: center; gap: 0.3rem; white-space: nowrap;
+    }
+    .pred-link:hover { opacity: 0.75; transform: translateY(-1px); }
+
+    .pred-article { padding: 0.45rem 0; border-bottom: 1px solid var(--line); }
+    .pred-article:last-child { border-bottom: none; }
+    .pred-article-title { font-size: 0.79rem; color: var(--text); text-decoration: none; line-height: 1.45; display: block; }
+    .pred-article-title:hover { color: var(--accent); }
+    .pred-source-label { font-size: 0.64rem; color: var(--muted); margin-top: 0.18rem; letter-spacing: 0.02em; }
+    .pred-msg { font-size: 0.75rem; color: var(--muted); font-style: italic; }
+
     @media (max-width: 920px) {
       .layout { grid-template-columns: 1fr; }
       .insights-panel { position: static; }
       .matches-scroll { max-height: none; }
+      .insights-scroll { max-height: none; }
     }
   </style>
 </head>
@@ -316,10 +337,12 @@
         <header class="panel-header">
           <h2>Match Insights</h2>
         </header>
-        <div id="insights-body">
-          <div class="insights-empty">
-            <div class="ei-icon">📊</div>
-            <p>Click any match to see H2H record, recent form, and live rankings.</p>
+        <div class="insights-scroll">
+          <div id="insights-body">
+            <div class="insights-empty">
+              <div class="ei-icon">📊</div>
+              <p>Click any match to see H2H record, recent form, live rankings, and prediction sources.</p>
+            </div>
           </div>
         </div>
       </aside>
@@ -438,13 +461,16 @@
     }
 
     function updateDateChips(matches) {
-      const dates = [...new Set(matches.map(m => m.date).filter(Boolean))].sort().reverse().slice(0, 9);
-      DATE_ROW.innerHTML = dates.map(d =>
-        `<button class="chip date-chip${dateFilter === d ? ' active' : ''}" data-date="${d}">${fmtDate(d)}</button>`
-      ).join('');
+      const dates = [...new Set(matches.map(m => m.date).filter(Boolean))].sort(); // past left → future right
+      const allActive = dateFilter === null;
+      DATE_ROW.innerHTML =
+        `<button class="chip date-chip${allActive ? ' active' : ''}" data-date="">All</button>` +
+        dates.map(d =>
+          `<button class="chip date-chip${dateFilter === d ? ' active' : ''}" data-date="${d}">${fmtDate(d)}</button>`
+        ).join('');
       DATE_ROW.querySelectorAll('.date-chip').forEach(btn =>
         btn.addEventListener('click', () => {
-          dateFilter = dateFilter === btn.dataset.date ? null : btn.dataset.date;
+          dateFilter = btn.dataset.date || null; // empty string → null (show all)
           updateDateChips(cachedMatches);
           renderAll(cachedMatches);
         })
@@ -556,6 +582,57 @@
       });
     }
 
+    // ── Predictions ───────────────────────────────────────────────────────────
+
+    const PRED_SOURCES = [
+      { id: 'tennistonic', name: 'Tennis Tonic',        color: '#62f2a6', url: 'https://tennistonic.com/?s={}' },
+      { id: 'grandstand',  name: 'The Grandstand',      color: '#7dd3fc', url: 'https://tenngrand.com/?s={}' },
+      { id: 'lwos',        name: 'Last Word on Sports',  color: '#f9a8d4', url: 'https://lastwordonsports.com/?s={}' },
+    ];
+
+    function predLinks(name1, name2) {
+      const q = encodeURIComponent(`${name1} ${name2} tennis`);
+      const xQ = encodeURIComponent(`${name1} ${name2} tennis prediction`);
+      const siteLinks = PRED_SOURCES.map(s => {
+        const href = s.url.replace('{}', q);
+        return `<a class="pred-link" href="${href}" target="_blank" rel="noopener"
+                   style="color:${s.color};border-color:${s.color}40;background:${s.color}12">
+                   ${s.name}</a>`;
+      }).join('');
+      const xLink = `<a class="pred-link" href="https://x.com/search?q=${xQ}&f=live" target="_blank" rel="noopener"
+                       style="color:#e2e8f0;border-color:rgba(226,232,240,0.25);background:rgba(226,232,240,0.07)">
+                       𝕏 Search</a>`;
+      return siteLinks + xLink;
+    }
+
+    async function fetchPredictions(name1, name2) {
+      const el = document.getElementById('pred-articles');
+      if (!el) return;
+      try {
+        const p1 = encodeURIComponent(name1);
+        const p2 = encodeURIComponent(name2);
+        const res = await fetch(`/api/tennis-news?player1=${p1}&player2=${p2}`,
+                                { signal: AbortSignal.timeout(10000) });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        const articles = (data.sources || []).flatMap(s =>
+          (s.articles || []).map(a => ({ ...a, sourceName: s.name, sourceColor: s.color }))
+        );
+        if (!el) return; // panel may have been replaced
+        if (!articles.length) {
+          el.innerHTML = '<span class="pred-msg">No previews found — use the links above to browse directly.</span>';
+          return;
+        }
+        el.innerHTML = articles.map(a => `
+          <div class="pred-article">
+            <a class="pred-article-title" href="${a.url}" target="_blank" rel="noopener">${a.title}</a>
+            <div class="pred-source-label" style="color:${a.sourceColor}">${a.sourceName}</div>
+          </div>`).join('');
+      } catch (_) {
+        if (el) el.innerHTML = '<span class="pred-msg">Could not load previews — use links above.</span>';
+      }
+    }
+
     // ── Insights ──────────────────────────────────────────────────────────────
 
     function getH2H(matches, id1, id2) {
@@ -658,6 +735,14 @@
         <div class="ins-section">
           <div class="ins-title">Recent Form — ${p2.name}</div>
           <div class="form-line">${formBadges(form2)}</div>
+        </div>
+
+        <div class="ins-section" id="pred-section">
+          <div class="ins-title">Prediction Sources</div>
+          <div class="pred-links">
+            ${predLinks(p1.name, p2.name)}
+          </div>
+          <div id="pred-articles"><span class="pred-msg">Loading previews…</span></div>
         </div>`;
 
       // Async rankings
@@ -679,6 +764,9 @@
       } else {
         document.getElementById('rank-body').innerHTML = '<span class="rank-msg">No player ID available</span>';
       }
+
+      // Async predictions
+      fetchPredictions(p1.name, p2.name);
 
       // On mobile scroll down to insights
       if (window.innerWidth <= 920) {
