@@ -206,11 +206,9 @@
     .players { display: grid; gap: 0.38rem; }
     .row {
       display: grid;
-      grid-template-columns: 1.4rem 1fr repeat(var(--sets, 2), 1.75rem) 2.3rem;
+      grid-template-columns: 1fr repeat(var(--sets, 2), 1.75rem) 2.3rem;
       gap: 0.38rem; align-items: center; font-size: 0.91rem;
     }
-    .serve-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); justify-self: center; }
-    .serve-dot.hidden { visibility: hidden; }
     .pname { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .pname.winner { color: var(--accent); }
     .set-score {
@@ -556,8 +554,7 @@
           return `<span class="set-score${won ? ' won' : ''}">${val}</span>`;
         }).join('');
         return `<div class="row" style="--sets:${maxSets}">
-          <span class="serve-dot${p.serving ? '' : ' hidden'}"></span>
-          <span class="pname${p.winner ? ' winner' : ''}">${p.name}</span>
+          <span class="pname${p.winner ? ' winner' : ''}">${p.serving ? '🎾 ' : ''}${p.name}</span>
           ${setScores}
           <span class="game-score">${m.isComplete ? '' : p.game}</span>
         </div>`;

@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Block Blast · Ryan Espejo</title>
+  <style>
+    :root {
+      --cell: min(44px, calc((100vw - 52px) / 8));
+      --gap: 3px;
+      --pad: 6px;
+      --accent: #3b82f6;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #0d1117;
+      color: #e2e8f0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 1rem 0.75rem 1.5rem;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: manipulation;
+    }
+
+    /* ── Header ── */
+    header {
+      display: flex;
+      align-items: center;
+      width: 100%;
+      max-width: 420px;
+      margin-bottom: 0.9rem;
+    }
+    .back { color: #475569; text-decoration: none; font-size: 0.82rem; transition: color .15s; }
+    .back:hover { color: #e2e8f0; }
+    h1 { flex: 1; text-align: center; font-size: 1.25rem; font-weight: 700; letter-spacing: .02em; }
+
+    /* ── Score bar ── */
+    .score-bar {
+      display: flex;
+      gap: 0;
+      width: 100%;
+      max-width: 420px;
+      background: #161b22;
+      border: 1px solid #21262d;
+      border-radius: 12px;
+      margin-bottom: 0.9rem;
+      overflow: hidden;
+    }
+    .score-item {
+      flex: 1;
+      text-align: center;
+      padding: 0.6rem 0.5rem;
+      border-right: 1px solid #21262d;
+    }
+    .score-item:last-child { border-right: none; }
+    .score-label { font-size: 0.6rem; color: #64748b; text-transform: uppercase; letter-spacing: .07em; margin-bottom: 2px; }
+    .score-value { font-size: 1.25rem; font-weight: 700; font-variant-numeric: tabular-nums; color: #f0f6fc; transition: transform .15s; }
+    .score-value.bump { animation: bump .2s ease-out; }
+    @keyframes bump { 0%,100%{transform:scale(1)} 50%{transform:scale(1.35)} }
+
+    /* ── Combo banner ── */
+    #combo-banner {
+      height: 22px;
+      margin-bottom: 0.4rem;
+      font-size: 0.8rem;
+      font-weight: 700;
+      color: #fbbf24;
+      text-align: center;
+      opacity: 0;
+      transition: opacity .2s;
+      letter-spacing: .04em;
+    }
+    #combo-banner.show { opacity: 1; }
+
+    /* ── Grid ── */
+    #grid-wrap {
+      position: relative;
+      margin-bottom: 0.9rem;
+      touch-action: none;
+    }
+    #grid {
+      display: grid;
+      grid-template-columns: repeat(8, var(--cell));
+      grid-template-rows: repeat(8, var(--cell));
+      gap: var(--gap);
+      background: #161b22;
+      border: 2px solid #21262d;
+      border-radius: 10px;
+      padding: var(--pad);
+    }
+    .cell {
+      width: var(--cell);
+      height: var(--cell);
+      border-radius: 5px;
+      background: #0d1117;
+      border: 1px solid #1e2633;
+      cursor: pointer;
+      transition: background .06s, transform .06s;
+    }
+    .cell.filled  { border-color: transparent; }
+    .cell.preview { opacity: .6; border-color: transparent; }
+    .cell.bad     { background: #ef444488 !important; border-color: transparent; }
+    .cell.flash   { animation: flash .35s ease-out forwards; }
+    @keyframes flash {
+      0%   { background: #ffffff; border-color: transparent; }
+      60%  { background: #fbbf24; border-color: transparent; }
+      100% { background: #0d1117; border: 1px solid #1e2633; }
+    }
+
+    /* ── Tray ── */
+    #tray {
+      display: flex;
+      gap: 0.5rem;
+      justify-content: center;
+      align-items: center;
+      width: 100%;
+      max-width: 420px;
+      background: #161b22;
+      border: 1px solid #21262d;
+      border-radius: 12px;
+      padding: 0.75rem 0.5rem;
+      min-height: 110px;
+    }
+    .slot {
+      flex: 1;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 90px;
+      border-radius: 8px;
+      border: 2px solid transparent;
+      cursor: pointer;
+      transition: border-color .15s, background .15s;
+    }
+    .slot:not(.used):hover { background: #1e2633; }
+    .slot.selected { border-color: var(--accent); background: #1e3a5f33; }
+    .slot.used { opacity: .18; pointer-events: none; }
+    .piece-grid { display: grid; gap: 3px; }
+    .pc {
+      width: 14px;
+      height: 14px;
+      border-radius: 3px;
+    }
+
+    /* ── Overlay ── */
+    #overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.75);
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      backdrop-filter: blur(6px);
+    }
+    #overlay.show { display: flex; }
+    .box {
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 16px;
+      padding: 2rem 2.5rem;
+      text-align: center;
+    }
+    .box h2 { font-size: 2rem; margin-bottom: .4rem; }
+    .box p  { color: #94a3b8; margin-bottom: 1.5rem; font-size: 1rem; }
+    .btn {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: .65rem 2rem;
+      font-size: .95rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background .15s, transform .1s;
+    }
+    .btn:active { transform: scale(.96); }
+    .btn:hover  { background: #2563eb; }
+  </style>
+</head>
+<body>
+
+<header>
+  <a class="back" href="/">← Home</a>
+  <h1>Block Blast</h1>
+  <div style="width:52px"></div>
+</header>
+
+<div class="score-bar">
+  <div class="score-item">
+    <div class="score-label">Score</div>
+    <div class="score-value" id="score">0</div>
+  </div>
+  <div class="score-item">
+    <div class="score-label">Best</div>
+    <div class="score-value" id="best">0</div>
+  </div>
+  <div class="score-item">
+    <div class="score-label">Lines</div>
+    <div class="score-value" id="lines">0</div>
+  </div>
+</div>
+
+<div id="combo-banner"></div>
+
+<div id="grid-wrap">
+  <div id="grid"></div>
+</div>
+
+<div id="tray">
+  <div class="slot" id="slot-0"></div>
+  <div class="slot" id="slot-1"></div>
+  <div class="slot" id="slot-2"></div>
+</div>
+
+<div id="overlay">
+  <div class="box">
+    <h2>Game Over</h2>
+    <p id="overlay-msg"></p>
+    <button class="btn" onclick="startGame()">Play Again</button>
+  </div>
+</div>
+
+<script>
+const GRID = 8;
+
+// [row, col] offsets, color
+const PIECES = [
+  { cells:[[0,0]],                                                               color:'#f472b6' },
+  { cells:[[0,0],[0,1]],                                                         color:'#4ade80' },
+  { cells:[[0,0],[1,0]],                                                         color:'#4ade80' },
+  { cells:[[0,0],[0,1],[0,2]],                                                   color:'#60a5fa' },
+  { cells:[[0,0],[1,0],[2,0]],                                                   color:'#60a5fa' },
+  { cells:[[0,0],[0,1],[0,2],[0,3]],                                             color:'#22d3ee' },
+  { cells:[[0,0],[1,0],[2,0],[3,0]],                                             color:'#22d3ee' },
+  { cells:[[0,0],[0,1],[0,2],[0,3],[0,4]],                                       color:'#a3e635' },
+  { cells:[[0,0],[1,0],[2,0],[3,0],[4,0]],                                       color:'#a3e635' },
+  { cells:[[0,0],[0,1],[1,0],[1,1]],                                             color:'#fbbf24' },
+  { cells:[[0,0],[0,1],[0,2],[1,0],[1,1],[1,2],[2,0],[2,1],[2,2]],               color:'#fde047' },
+  { cells:[[0,0],[0,1],[0,2],[1,0],[1,1],[1,2]],                                 color:'#fb923c' },
+  { cells:[[0,0],[0,1],[1,0],[1,1],[2,0],[2,1]],                                 color:'#fb923c' },
+  { cells:[[0,0],[1,0],[2,0],[2,1]],                                             color:'#c084fc' },
+  { cells:[[0,1],[1,1],[2,0],[2,1]],                                             color:'#c084fc' },
+  { cells:[[0,0],[0,1],[1,0],[2,0]],                                             color:'#c084fc' },
+  { cells:[[0,0],[0,1],[1,1],[2,1]],                                             color:'#c084fc' },
+  { cells:[[0,0],[0,1],[0,2],[1,1]],                                             color:'#e879f9' },
+  { cells:[[0,0],[1,0],[2,0],[1,1]],                                             color:'#e879f9' },
+  { cells:[[0,1],[0,2],[1,0],[1,1]],                                             color:'#f87171' },
+  { cells:[[0,0],[0,1],[1,1],[1,2]],                                             color:'#f87171' },
+  { cells:[[0,1],[1,0],[1,1],[1,2],[2,1]],                                       color:'#38bdf8' },
+  { cells:[[0,0],[0,1],[1,0]],                                                   color:'#34d399' },
+  { cells:[[0,0],[0,1],[1,1]],                                                   color:'#34d399' },
+  { cells:[[0,0],[1,0],[1,1]],                                                   color:'#34d399' },
+  { cells:[[0,1],[1,0],[1,1]],                                                   color:'#34d399' },
+];
+
+let grid, score, best, linesCleared, streak, pieces, selIdx, hoverR, hoverC, placing;
+
+function startGame() {
+  grid = Array.from({length: GRID}, () => Array(GRID).fill(null));
+  score = 0; linesCleared = 0; streak = 0;
+  selIdx = null; hoverR = null; hoverC = null; placing = false;
+  best = parseInt(localStorage.getItem('bb_best') || '0');
+  document.getElementById('overlay').classList.remove('show');
+  hideComboBanner();
+  deal();
+  renderGrid();
+  updateHUD();
+}
+
+// ── Pieces ────────────────────────────────────────────────────────────────────
+
+function rand(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+
+function deal() {
+  pieces = [rand(PIECES), rand(PIECES), rand(PIECES)];
+  selIdx = null;
+  renderTray();
+}
+
+function selectPiece(idx) {
+  if (!pieces[idx]) return;
+  selIdx = selIdx === idx ? null : idx;
+  renderTray();
+  renderGrid();
+}
+
+// ── HUD ───────────────────────────────────────────────────────────────────────
+
+function updateHUD() {
+  setText('score', score.toLocaleString());
+  setText('best',  best.toLocaleString());
+  setText('lines', linesCleared);
+}
+
+function setText(id, v) {
+  const el = document.getElementById(id);
+  el.textContent = v;
+  el.classList.remove('bump');
+  void el.offsetWidth;
+  el.classList.add('bump');
+}
+
+function showComboBanner(n) {
+  const el = document.getElementById('combo-banner');
+  const labels = ['','','DOUBLE!','TRIPLE!','QUAD!','MEGA COMBO!'];
+  el.textContent = labels[Math.min(n, labels.length-1)] || `${n}× COMBO!`;
+  el.classList.add('show');
+}
+function hideComboBanner() {
+  document.getElementById('combo-banner').classList.remove('show');
+}
+
+// ── Grid rendering ────────────────────────────────────────────────────────────
+
+function lighten(hex) {
+  const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
+  return `rgba(${Math.min(255,r+70)},${Math.min(255,g+70)},${Math.min(255,b+70)},.55)`;
+}
+
+function renderGrid() {
+  const el = document.getElementById('grid');
+  el.innerHTML = '';
+
+  let preview = new Map();  // key -> color|'bad'
+  if (selIdx !== null && hoverR !== null) {
+    const p = pieces[selIdx];
+    const ok = canPlace(p, hoverR, hoverC);
+    for (const [dr,dc] of p.cells) {
+      const r = hoverR+dr, c = hoverC+dc;
+      if (r>=0 && r<GRID && c>=0 && c<GRID)
+        preview.set(r*GRID+c, ok ? p.color : 'bad');
+    }
+  }
+
+  for (let r=0; r<GRID; r++) {
+    for (let c=0; c<GRID; c++) {
+      const div = document.createElement('div');
+      div.className = 'cell';
+      const key = r*GRID+c;
+
+      if (grid[r][c]) {
+        div.classList.add('filled');
+        div.style.background = grid[r][c];
+        div.style.boxShadow = `inset 0 2px 0 ${lighten(grid[r][c])}`;
+      } else if (preview.has(key)) {
+        const v = preview.get(key);
+        div.classList.add(v === 'bad' ? 'bad' : 'preview');
+        if (v !== 'bad') {
+          div.style.background = v;
+          div.style.boxShadow = `inset 0 2px 0 ${lighten(v)}`;
+        }
+      }
+
+      div.addEventListener('mouseenter', () => { hoverR=r; hoverC=c; renderGrid(); });
+      div.addEventListener('click', () => drop(r, c));
+      el.appendChild(div);
+    }
+  }
+}
+
+// ── Tray rendering ────────────────────────────────────────────────────────────
+
+function renderTray() {
+  for (let i=0; i<3; i++) {
+    const slot = document.getElementById(`slot-${i}`);
+    slot.className = 'slot' + (i===selIdx ? ' selected' : '');
+    slot.onclick = () => selectPiece(i);
+    slot.innerHTML = '';
+    const p = pieces[i];
+    if (!p) { slot.classList.add('used'); continue; }
+
+    const rs = p.cells.map(([r])=>r), cs = p.cells.map(([,c])=>c);
+    const maxR = Math.max(...rs), maxC = Math.max(...cs);
+    const wrap = document.createElement('div');
+    wrap.className = 'piece-grid';
+    wrap.style.gridTemplateColumns = `repeat(${maxC+1}, 14px)`;
+    wrap.style.gridTemplateRows    = `repeat(${maxR+1}, 14px)`;
+    for (let r=0; r<=maxR; r++) {
+      for (let c=0; c<=maxC; c++) {
+        const d = document.createElement('div');
+        d.className = 'pc';
+        const filled = p.cells.some(([pr,pc])=>pr===r&&pc===c);
+        if (filled) { d.style.background=p.color; d.style.boxShadow=`inset 0 2px 0 ${lighten(p.color)}`; }
+        else d.style.background='transparent';
+        wrap.appendChild(d);
+      }
+    }
+    slot.appendChild(wrap);
+  }
+}
+
+// ── Placement ─────────────────────────────────────────────────────────────────
+
+function canPlace(p, sr, sc) {
+  for (const [dr,dc] of p.cells) {
+    const r=sr+dr, c=sc+dc;
+    if (r<0||r>=GRID||c<0||c>=GRID||grid[r][c]) return false;
+  }
+  return true;
+}
+
+function drop(r, c) {
+  if (placing || selIdx===null) return;
+  const p = pieces[selIdx];
+  if (!canPlace(p, r, c)) return;
+
+  placing = true;
+  for (const [dr,dc] of p.cells) grid[r+dr][c+dc] = p.color;
+  score += p.cells.length;
+  pieces[selIdx] = null;
+  selIdx = null;
+  renderTray();
+  renderGrid();
+  clearLines(() => {
+    placing = false;
+    if (pieces.every(x=>!x)) {
+      deal();
+    }
+    renderTray();
+    renderGrid();
+    updateHUD();
+    if (!hasAnyMove()) gameOver();
+  });
+}
+
+function clearLines(done) {
+  const rowsToClear = [], colsToClear = [];
+  for (let r=0; r<GRID; r++) if (grid[r].every(v=>v)) rowsToClear.push(r);
+  for (let c=0; c<GRID; c++) if (grid.every(row=>row[c])) colsToClear.push(c);
+
+  const count = rowsToClear.length + colsToClear.length;
+  if (!count) { streak=0; hideComboBanner(); done(); return; }
+
+  streak++;
+  const bonus = streak > 1 ? streak : 1;
+  const pts = count * GRID * 10 * bonus;
+  score += pts;
+  linesCleared += count;
+  if (score > best) { best=score; localStorage.setItem('bb_best',best); }
+  if (streak > 1) showComboBanner(streak);
+
+  // Flash cells
+  const cells = document.querySelectorAll('.cell');
+  const toFlash = new Set();
+  rowsToClear.forEach(r => { for (let c=0;c<GRID;c++) toFlash.add(r*GRID+c); });
+  colsToClear.forEach(c => { for (let r=0;r<GRID;r++) toFlash.add(r*GRID+c); });
+  toFlash.forEach(i => cells[i]?.classList.add('flash'));
+
+  setTimeout(() => {
+    rowsToClear.forEach(r => { for (let c=0;c<GRID;c++) grid[r][c]=null; });
+    colsToClear.forEach(c => { for (let r=0;r<GRID;r++) grid[r][c]=null; });
+    done();
+  }, 380);
+}
+
+function hasAnyMove() {
+  for (const p of pieces) {
+    if (!p) continue;
+    for (let r=0;r<GRID;r++) for (let c=0;c<GRID;c++) if (canPlace(p,r,c)) return true;
+  }
+  return false;
+}
+
+function gameOver() {
+  if (score > best) { best=score; localStorage.setItem('bb_best',best); }
+  const el = document.getElementById('overlay-msg');
+  el.innerHTML = `Score: <strong>${score.toLocaleString()}</strong>${score>=best&&score>0?' &nbsp;🏆 New best!':''}`;
+  document.getElementById('overlay').classList.add('show');
+}
+
+// ── Touch support ─────────────────────────────────────────────────────────────
+
+function cellFromTouch(e) {
+  const touch = e.touches[0] || e.changedTouches[0];
+  const gridEl = document.getElementById('grid');
+  const rect   = gridEl.getBoundingClientRect();
+  const cellPx = (rect.width  - 12 - 7*3) / 8;  // pad*2=12, 7 gaps
+  const c = Math.floor((touch.clientX - rect.left  - 6) / (cellPx + 3));
+  const r = Math.floor((touch.clientY - rect.top   - 6) / (cellPx + 3));
+  if (r<0||r>=GRID||c<0||c>=GRID) return null;
+  return {r, c};
+}
+
+document.getElementById('grid').addEventListener('touchmove', e => {
+  e.preventDefault();
+  if (selIdx === null) return;
+  const pos = cellFromTouch(e);
+  if (pos) { hoverR=pos.r; hoverC=pos.c; renderGrid(); }
+}, { passive: false });
+
+document.getElementById('grid').addEventListener('touchend', e => {
+  e.preventDefault();
+  const pos = cellFromTouch(e);
+  if (pos) drop(pos.r, pos.c);
+  hoverR = null; hoverC = null;
+}, { passive: false });
+
+document.getElementById('grid').addEventListener('mouseleave', () => {
+  hoverR = null; hoverC = null; renderGrid();
+});
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { selIdx=null; renderTray(); renderGrid(); }
+});
+
+// ── Boot ──────────────────────────────────────────────────────────────────────
+startGame();
+</script>
+</body>
+</html>
