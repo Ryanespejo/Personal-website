@@ -442,7 +442,8 @@
       if (roundName) tournament += ` · ${roundName}`;
       const sorted = [...competitors].sort((a, b) => (a.order ?? 99) - (b.order ?? 99));
       const players = sorted.map(c => ({
-        name: c.athlete?.shortName || c.athlete?.displayName || c.name || 'Player',
+        name:     c.athlete?.shortName || c.athlete?.displayName || c.name || 'Player',
+        fullName: c.athlete?.displayName || c.athlete?.shortName || c.name || 'Player',
         sets: (c.linescores || []).map(l => l.value != null ? String(Math.round(l.value)) : '—'),
         game: String(c.score || '—'),
         serving: !!c.status?.isCurrent,
@@ -649,17 +650,19 @@
     // ── Predictions ───────────────────────────────────────────────────────────
 
     const PRED_SOURCES = [
-      { id: 'tennistonic', name: 'Tennis Tonic',        color: '#62f2a6', url: 'https://tennistonic.com/?s={}' },
+      { id: 'tennistonic', name: 'Tennis Tonic H2H',    color: '#62f2a6' },
       { id: 'grandstand',  name: 'The Grandstand',      color: '#7dd3fc', url: 'https://tenngrand.com/?s={}' },
       { id: 'lwos',        name: 'Last Word on Sports',  color: '#f9a8d4', url: 'https://lastwordonsports.com/?s={}' },
     ];
 
-    function predLinks(name1, name2, tournament, year) {
-      // Sites write tournament-preview articles — search by tournament + year
-      const tournQ  = encodeURIComponent(`${tournament} ${year} tennis`);
-      const xQ      = encodeURIComponent(`${name1} ${name2} ${tournament} ${year}`);
+    function predLinks(name1, name2, fullName1, fullName2, tournament, year) {
+      const tournQ = encodeURIComponent(`${tournament} ${year} tennis`);
+      const xQ     = encodeURIComponent(`${name1} ${name2} ${tournament} ${year}`);
+      // Tennis Tonic H2H URL: full name with spaces → dashes
+      const ttSlug = (n) => (n || '').replace(/\s+/g, '-');
+      const ttH2h  = `https://tennistonic.com/head-to-head-compare/${ttSlug(fullName1)}-Vs-${ttSlug(fullName2)}/`;
       const siteLinks = PRED_SOURCES.map(s => {
-        const href = s.url.replace('{}', tournQ);
+        const href = s.id === 'tennistonic' ? ttH2h : s.url.replace('{}', tournQ);
         return `<a class="pred-link" href="${href}" target="_blank" rel="noopener"
                    style="color:${s.color};border-color:${s.color}40;background:${s.color}12">
                    ${s.name}</a>`;
@@ -807,7 +810,7 @@
         <div class="ins-section" id="pred-section">
           <div class="ins-title">Prediction Sources</div>
           <div class="pred-links">
-            ${predLinks(p1.name, p2.name, match.tournamentName, (match.date || '').slice(0, 4))}
+            ${predLinks(p1.name, p2.name, p1.fullName || p1.name, p2.fullName || p2.name, match.tournamentName, (match.date || '').slice(0, 4))}
           </div>
           <div id="pred-articles"><span class="pred-msg">Loading previews…</span></div>
         </div>`;
