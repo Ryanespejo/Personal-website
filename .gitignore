@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Node
+node_modules/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Vercel
+.vercel
