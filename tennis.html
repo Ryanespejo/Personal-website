@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tennis Live | Ryan Espejo</title>
+  <style>
+    :root {
+      --bg: #07090f;
+      --panel: #111625;
+      --panel-soft: #171d2f;
+      --line: #252d45;
+      --text: #f4f7ff;
+      --muted: #9ba7c6;
+      --accent: #62f2a6;
+      --accent-soft: rgba(98, 242, 166, 0.14);
+      --danger: #ff6a7b;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background:
+        radial-gradient(circle at top right, #1c2b5f 0%, transparent 40%),
+        radial-gradient(circle at bottom left, #193838 0%, transparent 35%),
+        var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 2rem 1.25rem 3rem;
+    }
+
+    .app { max-width: 1100px; margin: 0 auto; display: grid; gap: 1rem; }
+    .topbar { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; }
+    .brand h1 { font-size: clamp(1.35rem, 3vw, 2rem); letter-spacing: 0.01em; }
+    .brand p { color: var(--muted); font-size: 0.92rem; margin-top: 0.25rem; }
+    .home-link { text-decoration: none; color: var(--text); border: 1px solid var(--line); background: var(--panel); padding: 0.55rem 0.95rem; border-radius: 999px; font-size: 0.85rem; transition: 0.2s ease; }
+    .home-link:hover { border-color: var(--accent); color: var(--accent); }
+
+    .filters { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+    .chip { border: 1px solid var(--line); background: var(--panel); color: var(--muted); border-radius: 999px; padding: 0.4rem 0.85rem; font-size: 0.8rem; letter-spacing: 0.03em; text-transform: uppercase; cursor: pointer; }
+    .chip.active { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+
+    .layout { display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 1rem; }
+    .panel { background: linear-gradient(180deg, var(--panel-soft), var(--panel)); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; }
+    .panel-header { display: flex; justify-content: space-between; align-items: center; padding: 0.9rem 1rem; border-bottom: 1px solid var(--line); }
+    .panel-header h2 { font-size: 0.95rem; letter-spacing: 0.03em; text-transform: uppercase; color: var(--muted); }
+    .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; background: var(--accent); box-shadow: 0 0 0 6px rgba(98, 242, 166, 0.15); margin-right: 0.4rem; transform: translateY(1px); }
+
+    .matches { display: grid; }
+    .match { display: grid; gap: 0.8rem; padding: 1rem; border-bottom: 1px solid var(--line); }
+    .match:last-child { border-bottom: 0; }
+    .match-meta { display: flex; justify-content: space-between; color: var(--muted); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.04em; }
+    .players { display: grid; gap: 0.5rem; }
+    .row { display: grid; grid-template-columns: 1fr auto auto auto; gap: 0.5rem; align-items: center; font-size: 0.95rem; }
+    .row strong { font-weight: 600; }
+    .set, .game { min-width: 1.8rem; text-align: center; border-radius: 8px; border: 1px solid var(--line); padding: 0.2rem 0.3rem; color: #dce4ff; font-variant-numeric: tabular-nums; }
+    .game { border-color: rgba(98, 242, 166, 0.4); background: rgba(98, 242, 166, 0.08); color: var(--accent); }
+
+    .stats-list { padding: 0.4rem 0.8rem 1rem; display: grid; gap: 0.5rem; }
+    .stat { border: 1px solid var(--line); border-radius: 12px; padding: 0.75rem; display: grid; gap: 0.55rem; background: rgba(16, 20, 34, 0.65); }
+    .stat-title { display: flex; justify-content: space-between; color: var(--muted); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em; }
+    .bar { height: 8px; border-radius: 999px; background: #202742; overflow: hidden; position: relative; }
+    .bar::before { content: ""; position: absolute; inset: 0; width: var(--fill, 50%); background: linear-gradient(90deg, #45d798, #70ffd9); }
+    .players-mini { display: flex; justify-content: space-between; font-size: 0.82rem; }
+
+    .badge-live, .badge-upcoming { font-size: 0.75rem; padding: 0.2rem 0.5rem; border-radius: 999px; letter-spacing: 0.05em; text-transform: uppercase; }
+    .badge-live { color: var(--accent); background: var(--accent-soft); border: 1px solid rgba(98, 242, 166, 0.4); }
+    .badge-upcoming { color: #ffcf6b; background: rgba(255, 207, 107, 0.14); border: 1px solid rgba(255, 207, 107, 0.35); }
+
+    .updated-at { color: var(--muted); font-size: 0.8rem; padding: 0 1rem 0.8rem; }
+    .status { color: var(--muted); font-size: 0.85rem; padding: 1rem; border-bottom: 1px solid var(--line); }
+
+    @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <section class="topbar">
+      <div class="brand">
+        <h1>Tennis Live Center</h1>
+        <p>Live ATP/WTA scoreboards refresh automatically every 60 seconds.</p>
+      </div>
+      <a class="home-link" href="index.html">&larr; Back home</a>
+    </section>
+
+    <section class="filters" aria-label="tournament filters">
+      <button class="chip active" data-tour="all">All</button>
+      <button class="chip" data-tour="atp">ATP</button>
+      <button class="chip" data-tour="wta">WTA</button>
+    </section>
+
+    <section class="layout">
+      <article class="panel">
+        <header class="panel-header">
+          <h2><span class="dot"></span>Live & Recent Matches</h2>
+          <span class="badge-live" id="live-count">Loading</span>
+        </header>
+        <div class="status" id="feed-status">Fetching live scoreboard feed…</div>
+        <div class="matches" id="matches"></div>
+        <div class="updated-at" id="updated-at"></div>
+      </article>
+
+      <aside class="panel">
+        <header class="panel-header">
+          <h2>How this works</h2>
+          <span class="badge-upcoming">Live feed</span>
+        </header>
+        <div class="stats-list">
+          <div class="stat">
+            <div class="stat-title"><span>Data source</span><span>ESPN</span></div>
+            <div class="players-mini"><span>ATP + WTA scoreboards</span><span>public endpoints</span></div>
+          </div>
+          <div class="stat">
+            <div class="stat-title"><span>Refresh rate</span><span>60s</span></div>
+            <div class="bar" style="--fill: 100%"></div>
+            <div class="players-mini"><span>Automatic polling</span><span>client-side JS</span></div>
+          </div>
+          <div class="stat">
+            <div class="stat-title"><span>Fallback</span><span>Enabled</span></div>
+            <div class="players-mini"><span>If feed fails</span><span>sample rows render</span></div>
+          </div>
+        </div>
+      </aside>
+    </section>
+  </main>
+
+  <script>
+    const MATCH_CONTAINER = document.getElementById('matches');
+    const STATUS = document.getElementById('feed-status');
+    const UPDATED_AT = document.getElementById('updated-at');
+    const LIVE_COUNT = document.getElementById('live-count');
+    const chips = Array.from(document.querySelectorAll('.chip'));
+
+    const FEEDS = {
+      atp: 'https://site.api.espn.com/apis/site/v2/sports/tennis/atp/scoreboard',
+      wta: 'https://site.api.espn.com/apis/site/v2/sports/tennis/wta/scoreboard'
+    };
+
+    const fallbackMatches = [
+      { tour: 'atp', tournament: 'ATP Doha · QF', status: 'Set 3 · 5:4', players: [['C. Alcaraz', '6', '3', '40'], ['L. Musetti', '4', '6', '30']] },
+      { tour: 'wta', tournament: 'WTA Dubai · R16', status: 'Set 2 · 2:1', players: [['I. Swiatek', '6', '2', 'Ad'], ['D. Kasatkina', '1', '1', '40']] }
+    ];
+
+    let currentFilter = 'all';
+    let cachedMatches = [];
+
+    function setActiveChip(filter) {
+      currentFilter = filter;
+      chips.forEach((chip) => chip.classList.toggle('active', chip.dataset.tour === filter));
+      renderMatches(cachedMatches);
+    }
+
+    function normalizeEvent(event, tour) {
+      const comp = event.competitions?.[0];
+      const competitors = comp?.competitors || [];
+      if (competitors.length < 2) return null;
+
+      const status = comp?.status?.type?.shortDetail || comp?.status?.type?.description || 'Scheduled';
+      const tournament = `${tour.toUpperCase()} · ${event.name || 'Match'}`;
+
+      const rows = competitors
+        .sort((a, b) => (a.homeAway === 'home' ? -1 : 1) - (b.homeAway === 'home' ? -1 : 1))
+        .map((c) => {
+          const athlete = c.athlete?.displayName || c.name || 'Player';
+          const lines = c.linescores || [];
+          const set1 = lines[0]?.value ?? '—';
+          const set2 = lines[1]?.value ?? '—';
+          const game = c.score ?? '—';
+          return [athlete, String(set1), String(set2), String(game)];
+        });
+
+      return { tour, tournament, status, players: rows };
+    }
+
+    function renderMatchRow(match) {
+      return `
+        <div class="match" data-tour="${match.tour}">
+          <div class="match-meta">
+            <span>${match.tournament}</span>
+            <span>${match.status}</span>
+          </div>
+          <div class="players">
+            ${match.players.map((p) => `<div class="row"><strong>${p[0]}</strong><span class="set">${p[1]}</span><span class="set">${p[2]}</span><span class="game">${p[3]}</span></div>`).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    function renderMatches(matches) {
+      const filtered = currentFilter === 'all' ? matches : matches.filter((m) => m.tour === currentFilter);
+      MATCH_CONTAINER.innerHTML = filtered.length ? filtered.map(renderMatchRow).join('') : '<div class="status">No matches available for this filter right now.</div>';
+      const liveTotal = matches.filter((m) => /live|set|in progress/i.test(m.status)).length;
+      LIVE_COUNT.textContent = `${liveTotal} Live`;
+    }
+
+    async function fetchFeed(tour) {
+      const res = await fetch(FEEDS[tour]);
+      if (!res.ok) throw new Error(`${tour.toUpperCase()} feed failed (${res.status})`);
+      const data = await res.json();
+      return (data.events || []).map((event) => normalizeEvent(event, tour)).filter(Boolean);
+    }
+
+    async function refreshMatches() {
+      try {
+        STATUS.textContent = 'Fetching live scoreboard feed…';
+        const [atp, wta] = await Promise.all([fetchFeed('atp'), fetchFeed('wta')]);
+        cachedMatches = [...atp, ...wta];
+        if (!cachedMatches.length) throw new Error('No matches in feed');
+        renderMatches(cachedMatches);
+        STATUS.textContent = 'Live feed connected.';
+        UPDATED_AT.textContent = `Last updated: ${new Date().toLocaleTimeString()}`;
+      } catch (err) {
+        cachedMatches = fallbackMatches;
+        renderMatches(cachedMatches);
+        STATUS.textContent = 'Could not reach live feed, showing sample matches.';
+        UPDATED_AT.textContent = `Fallback rendered at ${new Date().toLocaleTimeString()}`;
+      }
+    }
+
+    chips.forEach((chip) => chip.addEventListener('click', () => setActiveChip(chip.dataset.tour)));
+
+    refreshMatches();
+    setInterval(refreshMatches, 60000);
+  </script>
+</body>
+</html>
