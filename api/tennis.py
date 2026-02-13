@@ -65,17 +65,6 @@ def normalize(comp: dict, tour: str, event_name: str = ''):
 
     date_str = (comp.get('startDate') or comp.get('date') or '')[:10]
     sorted_competitors = sorted(competitors, key=lambda x: x.get('order', 99))
-    # Drop any "A vs B" summary entries ESPN occasionally includes alongside real players
-    sorted_competitors = [
-        c for c in sorted_competitors
-        if ' vs ' not in (
-            (c.get('athlete') or {}).get('shortName') or
-            (c.get('athlete') or {}).get('displayName') or
-            c.get('name') or ''
-        ).lower()
-    ]
-    if len(sorted_competitors) < 2:
-        return None
     player_ids = [str(c.get('id', '')) for c in sorted_competitors]
 
     players = []
