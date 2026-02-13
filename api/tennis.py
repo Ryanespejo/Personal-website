@@ -81,10 +81,10 @@ def normalize(comp: dict, tour: str, event_name: str = ''):
     players = []
     for c in sorted_competitors:
         athlete = c.get('athlete') or {}
-        name = athlete.get('shortName') or athlete.get('displayName') or c.get('name') or 'Player'
-        # If the name looks like a match summary ("A vs B"), this is not a real player entry
-        if ' vs ' in name.lower():
-            return None
+        roster = c.get('roster') or {}
+        name = (athlete.get('shortName') or athlete.get('displayName') or
+                roster.get('shortDisplayName') or roster.get('displayName') or
+                c.get('name') or 'Player')
         lines = c.get('linescores') or []
         sets = []
         for line in lines:
