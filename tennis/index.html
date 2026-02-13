@@ -524,9 +524,9 @@
 
     // ── Tournament dropdown ───────────────────────────────────────────────────
 
-    // A player "name" that contains " vs " is a match summary, not a real name — skip it
+    // A player "name" that contains " vs " or " v " is a match summary, not a real name — skip it
     function isValidPlayerName(name) {
-      return !/ vs /i.test(name);
+      return !/ vs\.? /i.test(name) && !/ v /i.test(name);
     }
 
     function updateTournSelect(matches) {
@@ -657,6 +657,7 @@
     const PRED_SOURCES = [
       { id: 'tennistonic', name: 'Tennis Tonic H2H',    color: '#62f2a6' },
       { id: 'grandstand',  name: 'The Grandstand',      color: '#7dd3fc', url: 'https://tenngrand.com/category/match-previews/' },
+<<<<<<< HEAD
       { id: 'lwos',        name: 'Last Word on Sports',  color: '#f9a8d4', url: 'https://lastwordonsports.com/tennis/' },
     ];
 
