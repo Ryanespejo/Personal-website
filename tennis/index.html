@@ -452,11 +452,17 @@
 
     // ── Date chips ────────────────────────────────────────────────────────────
 
+    // Local-timezone date string (avoids UTC rollover making "today" wrong in US evenings)
+    function localDateStr(dayOffset = 0) {
+      const d = new Date();
+      d.setDate(d.getDate() + dayOffset);
+      return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    }
+
     function fmtDate(d) {
-      const todayStr = new Date().toISOString().slice(0, 10);
-      const yestStr  = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
-      if (d === todayStr) return 'Today';
-      if (d === yestStr)  return 'Yesterday';
+      if (d === localDateStr(0))  return 'Today';
+      if (d === localDateStr(-1)) return 'Yesterday';
+      if (d === localDateStr(1))  return 'Tomorrow';
       return new Date(d + 'T12:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
     }
 
@@ -590,11 +596,12 @@
       { id: 'lwos',        name: 'Last Word on Sports',  color: '#f9a8d4', url: 'https://lastwordonsports.com/?s={}' },
     ];
 
-    function predLinks(name1, name2) {
-      const q = encodeURIComponent(`${name1} ${name2} tennis`);
-      const xQ = encodeURIComponent(`${name1} ${name2} tennis prediction`);
+    function predLinks(name1, name2, tournament, year) {
+      // Sites write tournament-preview articles — search by tournament + year
+      const tournQ  = encodeURIComponent(`${tournament} ${year} tennis`);
+      const xQ      = encodeURIComponent(`${name1} ${name2} ${tournament} ${year}`);
       const siteLinks = PRED_SOURCES.map(s => {
-        const href = s.url.replace('{}', q);
+        const href = s.url.replace('{}', tournQ);
         return `<a class="pred-link" href="${href}" target="_blank" rel="noopener"
                    style="color:${s.color};border-color:${s.color}40;background:${s.color}12">
                    ${s.name}</a>`;
@@ -605,13 +612,15 @@
       return siteLinks + xLink;
     }
 
-    async function fetchPredictions(name1, name2) {
+    async function fetchPredictions(name1, name2, tournament, year) {
       const el = document.getElementById('pred-articles');
       if (!el) return;
       try {
         const p1 = encodeURIComponent(name1);
         const p2 = encodeURIComponent(name2);
-        const res = await fetch(`/api/tennis-news?player1=${p1}&player2=${p2}`,
+        const t  = encodeURIComponent(tournament || '');
+        const y  = encodeURIComponent(year || '');
+        const res = await fetch(`/api/tennis-news?player1=${p1}&player2=${p2}&tournament=${t}&year=${y}`,
                                 { signal: AbortSignal.timeout(10000) });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
@@ -740,7 +749,7 @@
         <div class="ins-section" id="pred-section">
           <div class="ins-title">Prediction Sources</div>
           <div class="pred-links">
-            ${predLinks(p1.name, p2.name)}
+            ${predLinks(p1.name, p2.name, match.tournamentName, (match.date || '').slice(0, 4))}
           </div>
           <div id="pred-articles"><span class="pred-msg">Loading previews…</span></div>
         </div>`;
@@ -766,7 +775,7 @@
       }
 
       // Async predictions
-      fetchPredictions(p1.name, p2.name);
+      fetchPredictions(p1.name, p2.name, match.tournamentName, (match.date || '').slice(0, 4));
 
       // On mobile scroll down to insights
       if (window.innerWidth <= 920) {
