@@ -15,8 +15,10 @@ import io
 import json
 import math
 import os
+import pathlib
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 
 # ── In-memory caches ─────────────────────────────────────────────────────────
@@ -24,9 +26,19 @@ _model_cache: dict = {}
 _data_cache:  dict = {}
 MODEL_CACHE_TTL  = 3600    # reload model file once per hour
 DATA_CACHE_TTL   = 3600    # re-fetch Sackmann CSVs once per hour
+RAPID_CACHE_TTL  = 86400   # call RapidAPI at most once per day per cache key
 
 SACKMANN_ATP = "https://raw.githubusercontent.com/JeffSackmann/tennis_atp/master"
 SACKMANN_WTA = "https://raw.githubusercontent.com/JeffSackmann/tennis_wta/master"
+
+RAPIDAPI_BASE_URL = os.getenv("RAPIDAPI_TENNIS_BASE_URL", "https://tennisapi1.p.rapidapi.com")
+RAPIDAPI_HOST = os.getenv("RAPIDAPI_TENNIS_HOST", "tennisapi1.p.rapidapi.com")
+RAPIDAPI_KEY = os.getenv("RAPIDAPI_KEY", "")
+RAPIDAPI_SEARCH_PATH = os.getenv("RAPIDAPI_TENNIS_SEARCH_PATH", "/api/tennis/search/{query}")
+RAPIDAPI_PLAYER_STATS_PATH = os.getenv("RAPIDAPI_TENNIS_PLAYER_STATS_PATH", "/api/tennis/player/{player_id}/stats")
+RAPIDAPI_H2H_PATH = os.getenv("RAPIDAPI_TENNIS_H2H_PATH", "/api/tennis/h2h/{player1_id}/{player2_id}")
+RAPIDAPI_TIMEOUT = 10
+RAPID_CACHE_PATH = pathlib.Path("/tmp/rapid_tennis_cache.json")
 
 # Feature list must match analytics/config.py exactly
 FEATURES = [
@@ -84,6 +96,162 @@ def _load_model() -> dict | None:
         model = json.load(f)
     _model_cache["m"] = {"ts": now, "data": model}
     return model
+
+
+def _load_rapid_cache() -> dict:
+    cached = _data_cache.get("rapid_daily")
+    if cached:
+        return cached
+    if RAPID_CACHE_PATH.exists():
+        try:
+            with RAPID_CACHE_PATH.open("r", encoding="utf-8") as f:
+                payload = json.load(f)
+                if isinstance(payload, dict):
+                    _data_cache["rapid_daily"] = payload
+                    return payload
+        except Exception:
+            pass
+    payload = {"records": {}}
+    _data_cache["rapid_daily"] = payload
+    return payload
+
+
+def _save_rapid_cache(payload: dict):
+    try:
+        RAPID_CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with RAPID_CACHE_PATH.open("w", encoding="utf-8") as f:
+            json.dump(payload, f)
+    except Exception:
+        pass
+
+
+def _rapid_fetch_json(path: str, params: dict | None = None) -> dict:
+    if not RAPIDAPI_KEY:
+        return {}
+    q = ""
+    if params:
+        from urllib.parse import urlencode
+        q = "?" + urlencode(params)
+    url = f"{RAPIDAPI_BASE_URL.rstrip('/')}/{path.lstrip('/')}{q}"
+    req = urllib.request.Request(url, headers={
+        "User-Agent": "Mozilla/5.0 TennisAnalytics/1.0",
+        "Accept": "application/json",
+        "x-rapidapi-host": RAPIDAPI_HOST,
+        "x-rapidapi-key": RAPIDAPI_KEY,
+    })
+    with urllib.request.urlopen(req, timeout=RAPIDAPI_TIMEOUT) as resp:
+        return json.loads(resp.read().decode("utf-8", errors="replace"))
+
+
+def _rapid_daily(key: str, loader) -> dict:
+    now = time.time()
+    cache = _load_rapid_cache()
+    records = cache.setdefault("records", {})
+    rec = records.get(key)
+    if rec and now - rec.get("ts", 0) < RAPID_CACHE_TTL:
+        return rec.get("data", {})
+
+    data = loader()
+    if data:
+        records[key] = {"ts": now, "data": data}
+        _save_rapid_cache(cache)
+    return data
+
+
+def _rapid_find_player_id(name: str) -> str:
+    q = (name or "").strip()
+    if not q or not RAPIDAPI_KEY:
+        return ""
+
+    def _loader():
+        path = RAPIDAPI_SEARCH_PATH.format(query=urllib.parse.quote(q))
+        return _rapid_fetch_json(path)
+
+    data = _rapid_daily(f"search::{q.lower()}", _loader)
+    candidates = data.get("players") or data.get("results") or data.get("data") or []
+    if isinstance(candidates, dict):
+        candidates = candidates.get("players") or []
+    for c in candidates[:5]:
+        pid = c.get("id") or c.get("player_id") or c.get("playerId")
+        if pid is not None:
+            return str(pid)
+    return ""
+
+
+def _rapid_player_stats(player_id: str) -> dict:
+    if not player_id:
+        return {}
+
+    def _loader():
+        path = RAPIDAPI_PLAYER_STATS_PATH.format(player_id=player_id)
+        return _rapid_fetch_json(path)
+
+    return _rapid_daily(f"player_stats::{player_id}", _loader)
+
+
+def _rapid_h2h(player1_id: str, player2_id: str) -> dict:
+    if not player1_id or not player2_id:
+        return {}
+
+    def _loader():
+        path = RAPIDAPI_H2H_PATH.format(player1_id=player1_id, player2_id=player2_id)
+        return _rapid_fetch_json(path)
+
+    return _rapid_daily(f"h2h::{player1_id}::{player2_id}", _loader)
+
+
+def _extract_rapid_metrics(stats: dict, fallback_rank: float, fallback_points: float) -> dict:
+    rank = _sf(stats.get("rank") or stats.get("ranking") or stats.get("worldRank"), fallback_rank or 500)
+    points = _sf(stats.get("points") or stats.get("rankingPoints"), fallback_points)
+    wins = _sf(stats.get("wins") or stats.get("win"), 0)
+    losses = _sf(stats.get("losses") or stats.get("loss"), 0)
+    total = wins + losses
+    win_rate = wins / total if total else 0.5
+    return {
+        "rank": rank,
+        "points": points,
+        "wins": int(wins),
+        "losses": int(losses),
+        "win_rate": win_rate,
+    }
+
+
+def _custom_analytics(p1_name: str, p2_name: str, p1_rank: float, p2_rank: float, p1_points: float, p2_points: float) -> dict:
+    p1_id = _rapid_find_player_id(p1_name)
+    p2_id = _rapid_find_player_id(p2_name)
+    s1 = _extract_rapid_metrics(_rapid_player_stats(p1_id), p1_rank, p1_points)
+    s2 = _extract_rapid_metrics(_rapid_player_stats(p2_id), p2_rank, p2_points)
+    h2h_raw = _rapid_h2h(p1_id, p2_id)
+
+    p1_h2h_wins = _sf(h2h_raw.get("player1Wins") or h2h_raw.get("wins1"), 0)
+    p2_h2h_wins = _sf(h2h_raw.get("player2Wins") or h2h_raw.get("wins2"), 0)
+    h2h_total = p1_h2h_wins + p2_h2h_wins
+    h2h_ratio = p1_h2h_wins / h2h_total if h2h_total else 0.5
+
+    # Simple Elo-inspired custom score combining rank, points, W/L and H2H.
+    rank_gap = s2["rank"] - s1["rank"]
+    points_gap = s1["points"] - s2["points"]
+    form_gap = s1["win_rate"] - s2["win_rate"]
+    h2h_gap = h2h_ratio - 0.5
+
+    custom_z = (rank_gap * 0.012) + (points_gap * 0.00008) + (form_gap * 2.5) + (h2h_gap * 1.6)
+    custom_prob = _sigmoid(custom_z)
+    return {
+        "rapidapi_enabled": bool(RAPIDAPI_KEY),
+        "cache_ttl_hours": int(RAPID_CACHE_TTL / 3600),
+        "player_ids": {"p1": p1_id, "p2": p2_id},
+        "player_stats": {"p1": s1, "p2": s2},
+        "h2h": {
+            "p1_wins": int(p1_h2h_wins),
+            "p2_wins": int(p2_h2h_wins),
+            "total": int(h2h_total),
+        },
+        "custom_model": {
+            "type": "rapidapi_elo_logit_blend",
+            "p1_win_prob": round(custom_prob, 4),
+            "p2_win_prob": round(1 - custom_prob, 4),
+        },
+    }
 
 
 # ── Pure-Python sigmoid + predict ────────────────────────────────────────────
@@ -305,11 +473,20 @@ class handler(BaseHTTPRequestHandler):
                 feats, extra = _compute_features(p1, p2, tour, surface,
                                                   p1_rank, p2_rank, p1_pts, p2_pts, best_of)
                 pred = _predict(model, feats)
+                custom = _custom_analytics(p1, p2, p1_rank, p2_rank, p1_pts, p2_pts)
+                custom_prob = ((custom.get("custom_model") or {}).get("p1_win_prob"))
+                if isinstance(custom_prob, (int, float)):
+                    blended = (pred["p1_win_prob"] * 0.65) + (custom_prob * 0.35)
+                    pred["ensemble_win_prob"] = {
+                        "p1": round(blended, 4),
+                        "p2": round(1 - blended, 4),
+                    }
                 pred.update({
                     "player1": p1, "player2": p2,
                     "tour": tour, "surface": surface,
                     "h2h": extra["h2h"],
                     "player_stats": extra["stats"],
+                    "custom_analytics": custom,
                     "model_info": {
                         "accuracy": model.get("metadata", {}).get("accuracy"),
                         "auc": model.get("metadata", {}).get("auc"),

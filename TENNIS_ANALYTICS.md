@@ -86,6 +86,26 @@ Match CSVs contain ~49 columns per row: tournament info, player biographics, ran
 | Model file cache | 1 hour | Avoid re-reading model JSON on every request |
 | GitHub Action | Runs daily at 06:00 UTC | Fetches fresh data, retrains, commits updated model |
 
+## RapidAPI Custom Analytics (New)
+
+`/api/tennis-analytics?action=predict` now optionally enriches predictions with RapidAPI Tennis data when `RAPIDAPI_KEY` is set.
+
+- Pulls player lookup, player-level stats, and H2H from RapidAPI.
+- Builds a lightweight custom score (`rapidapi_elo_logit_blend`) from rankings, points, W/L form, and H2H.
+- Returns both custom model probabilities and an ensemble blend with the trained logistic model.
+- Uses a **daily cache (24h)** so each RapidAPI key/player combo is fetched at most once per day.
+
+### Environment variables
+
+- `RAPIDAPI_KEY` (required to enable RapidAPI enrichment)
+- `RAPIDAPI_TENNIS_BASE_URL` (default `https://tennisapi1.p.rapidapi.com`)
+- `RAPIDAPI_TENNIS_HOST` (default `tennisapi1.p.rapidapi.com`)
+- `RAPIDAPI_TENNIS_SEARCH_PATH` (default `/api/tennis/search/{query}`)
+- `RAPIDAPI_TENNIS_PLAYER_STATS_PATH` (default `/api/tennis/player/{player_id}/stats`)
+- `RAPIDAPI_TENNIS_H2H_PATH` (default `/api/tennis/h2h/{player1_id}/{player2_id}`)
+
+If RapidAPI is unavailable, the endpoint still returns baseline ML predictions.
+
 ## Usage
 
 ### Train the model locally
