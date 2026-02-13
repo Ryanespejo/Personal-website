@@ -780,6 +780,17 @@
         const dateText = modelInfo.trained_at ? new Date(modelInfo.trained_at).toLocaleDateString() : '';
         const infoLine = [accText, dateText].filter(Boolean).join(' · ');
 
+        const custom = d.custom_analytics || {};
+        const customModel = custom.custom_model || {};
+        const customP1 = Number.isFinite(customModel.p1_win_prob) ? Math.round(customModel.p1_win_prob * 100) : null;
+        const customP2 = Number.isFinite(customModel.p2_win_prob) ? Math.round(customModel.p2_win_prob * 100) : null;
+        const ensemble = d.ensemble_win_prob || {};
+        const ensP1 = Number.isFinite(ensemble.p1) ? Math.round(ensemble.p1 * 100) : null;
+        const ensP2 = Number.isFinite(ensemble.p2) ? Math.round(ensemble.p2 * 100) : null;
+        const rapidEnabled = !!custom.rapidapi_enabled;
+        const rapidStatus = custom.rapidapi_status || {};
+        const rapidStatusMsg = rapidStatus.message ? ` (${rapidStatus.message})` : '';
+
         el.innerHTML = `
           <div class="ml-prob-row">
             <span class="ml-prob-pct${p1Fav ? ' fav' : ''}">${name1} ${p1Pct}%</span>
@@ -794,7 +805,10 @@
             <span class="ml-confidence-fill" style="width:${confPct}px"></span>
           </div>
           ${factorsHtml ? `<div class="ins-title" style="margin-top:0.3rem">Key Factors</div><ul class="ml-factors">${factorsHtml}</ul>` : ''}
-          ${infoLine ? `<div class="ml-model-info">Model: ${infoLine}</div>` : ''}`;
+          ${infoLine ? `<div class="ml-model-info">Model: ${infoLine}</div>` : ''}
+          <div class="ml-model-info">RapidAPI daily cache: ${rapidEnabled ? 'enabled (24h)' : 'disabled (set RAPIDAPI_KEY)'}${rapidEnabled && rapidStatus.ok === false ? rapidStatusMsg : ''}</div>
+          ${(customP1 != null && customP2 != null) ? `<div class="ml-model-info">Custom model: ${name1} ${customP1}% · ${customP2}% ${name2}</div>` : ''}
+          ${(ensP1 != null && ensP2 != null) ? `<div class="ml-model-info">Ensemble blend: ${name1} ${ensP1}% · ${ensP2}% ${name2}</div>` : ''}`;
       } catch (_) {
         if (el) el.innerHTML = '<span class="ml-msg">ML prediction unavailable</span>';
       }
