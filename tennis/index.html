@@ -445,7 +445,12 @@
       const roundName = comp.round?.displayName || '';
       let tournament = `${tour.toUpperCase()} · ${eventName}`;
       if (roundName) tournament += ` · ${roundName}`;
-      const sorted = [...competitors].sort((a, b) => (a.order ?? 99) - (b.order ?? 99));
+      const allSorted = [...competitors].sort((a, b) => (a.order ?? 99) - (b.order ?? 99));
+      // Drop "A vs B" summary entries ESPN sometimes includes alongside real player entries
+      const sorted = allSorted.filter(c => !/ vs /i.test(
+        c.athlete?.shortName || c.athlete?.displayName || c.name || ''
+      ));
+      if (sorted.length < 2) return null;
       const players = sorted.map(c => ({
         name:     c.athlete?.shortName || c.athlete?.displayName || c.name || 'Player',
         fullName: c.athlete?.displayName || c.athlete?.shortName || c.name || 'Player',
@@ -585,8 +590,6 @@
 
     function renderAll(matches) {
       let filtered = matches;
-      // Drop entries where any "player" name is really a "A vs B" string
-      filtered = filtered.filter(m => m.players.every(p => isValidPlayerName(p.name)));
       if (tourFilter !== 'all')  filtered = filtered.filter(m => m.tour === tourFilter);
       if (liveOnly)              filtered = filtered.filter(m => m.isLive);
       if (dateFilter)            filtered = filtered.filter(m => m.date === dateFilter);
