@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tennis Live | Ryan Espejo</title>
+  <style>
+    :root { --bg:#07090f; --panel:#111625; --panel-soft:#171d2f; --line:#252d45; --text:#f4f7ff; --muted:#9ba7c6; --accent:#62f2a6; --accent-soft:rgba(98,242,166,.14); }
+    * { box-sizing:border-box; margin:0; padding:0; }
+    body { font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; background:radial-gradient(circle at top right,#1c2b5f 0%,transparent 40%),radial-gradient(circle at bottom left,#193838 0%,transparent 35%),var(--bg); color:var(--text); min-height:100vh; padding:2rem 1.25rem 3rem; }
+    .app { max-width:1100px; margin:0 auto; display:grid; gap:1rem; }
+    .topbar { display:flex; justify-content:space-between; align-items:center; gap:1rem; flex-wrap:wrap; }
+    .brand h1 { font-size:clamp(1.35rem,3vw,2rem); }
+    .brand p { color:var(--muted); font-size:.92rem; margin-top:.25rem; }
+    .home-link { text-decoration:none; color:var(--text); border:1px solid var(--line); background:var(--panel); padding:.55rem .95rem; border-radius:999px; font-size:.85rem; }
+    .home-link:hover { border-color:var(--accent); color:var(--accent); }
+    .filters { display:flex; gap:.5rem; flex-wrap:wrap; }
+    .chip { border:1px solid var(--line); background:var(--panel); color:var(--muted); border-radius:999px; padding:.4rem .85rem; font-size:.8rem; text-transform:uppercase; cursor:pointer; }
+    .chip.active { border-color:var(--accent); color:var(--accent); background:var(--accent-soft); }
+    .layout { display:grid; grid-template-columns:1.2fr .8fr; gap:1rem; }
+    .panel { background:linear-gradient(180deg,var(--panel-soft),var(--panel)); border:1px solid var(--line); border-radius:16px; overflow:hidden; }
+    .panel-header { display:flex; justify-content:space-between; align-items:center; padding:.9rem 1rem; border-bottom:1px solid var(--line); }
+    .panel-header h2 { font-size:.95rem; text-transform:uppercase; color:var(--muted); }
+    .dot { width:8px; height:8px; border-radius:50%; display:inline-block; background:var(--accent); box-shadow:0 0 0 6px rgba(98,242,166,.15); margin-right:.4rem; }
+    .matches { display:grid; }
+    .match { display:grid; gap:.8rem; padding:1rem; border-bottom:1px solid var(--line); }
+    .match-meta { display:flex; justify-content:space-between; color:var(--muted); font-size:.78rem; text-transform:uppercase; }
+    .players { display:grid; gap:.5rem; }
+    .row { display:grid; grid-template-columns:1fr auto auto auto; gap:.5rem; align-items:center; font-size:.95rem; }
+    .set,.game { min-width:1.8rem; text-align:center; border-radius:8px; border:1px solid var(--line); padding:.2rem .3rem; color:#dce4ff; font-variant-numeric:tabular-nums; }
+    .game { border-color:rgba(98,242,166,.4); background:rgba(98,242,166,.08); color:var(--accent); }
+    .status,.updated-at { color:var(--muted); font-size:.85rem; padding:1rem; }
+    .updated-at { padding-top:0; }
+    .badge-live,.badge-upcoming { font-size:.75rem; padding:.2rem .5rem; border-radius:999px; text-transform:uppercase; }
+    .badge-live { color:var(--accent); background:var(--accent-soft); border:1px solid rgba(98,242,166,.4); }
+    .badge-upcoming { color:#ffcf6b; background:rgba(255,207,107,.14); border:1px solid rgba(255,207,107,.35); }
+    .stats-list { padding:.5rem .9rem 1rem; display:grid; gap:.5rem; }
+    .stat { border:1px solid var(--line); border-radius:12px; padding:.75rem; background:rgba(16,20,34,.65); }
+    .stat-title { display:flex; justify-content:space-between; color:var(--muted); font-size:.8rem; text-transform:uppercase; }
+    .players-mini { display:flex; justify-content:space-between; font-size:.82rem; margin-top:.4rem; }
+    @media (max-width:900px){ .layout{ grid-template-columns:1fr; } }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <section class="topbar">
+      <div class="brand">
+        <h1>Tennis Live Center</h1>
+        <p>Live ATP/WTA scoreboard + today’s matches, refreshed every 60 seconds.</p>
+      </div>
+      <a class="home-link" href="/">&larr; Back home</a>
+    </section>
+
+    <section class="filters" aria-label="tournament filters">
+      <button class="chip active" data-tour="all">All</button>
+      <button class="chip" data-tour="atp">ATP</button>
+      <button class="chip" data-tour="wta">WTA</button>
+    </section>
+
+    <section class="layout">
+      <article class="panel">
+        <header class="panel-header">
+          <h2><span class="dot"></span>Live & Today</h2>
+          <span class="badge-live" id="live-count">Loading</span>
+        </header>
+        <div class="status" id="feed-status">Fetching live scoreboard feed…</div>
+        <div class="matches" id="matches"></div>
+        <div class="updated-at" id="updated-at"></div>
+      </article>
+
+      <aside class="panel">
+        <header class="panel-header">
+          <h2>Feed details</h2>
+          <span class="badge-upcoming">ESPN</span>
+        </header>
+        <div class="stats-list">
+          <div class="stat">
+            <div class="stat-title"><span>Mode</span><span>Live + Today</span></div>
+            <div class="players-mini"><span>Primary:</span><span>today date feed</span></div>
+            <div class="players-mini"><span>Fallback:</span><span>default scoreboard</span></div>
+          </div>
+          <div class="stat">
+            <div class="stat-title"><span>Refresh</span><span>60 sec</span></div>
+            <div class="players-mini"><span>Client-side polling</span><span>no backend yet</span></div>
+          </div>
+        </div>
+      </aside>
+    </section>
+  </main>
+
+  <script>
+    const MATCH_CONTAINER = document.getElementById('matches');
+    const STATUS = document.getElementById('feed-status');
+    const UPDATED_AT = document.getElementById('updated-at');
+    const LIVE_COUNT = document.getElementById('live-count');
+    const chips = Array.from(document.querySelectorAll('.chip'));
+
+    const FEEDS = {
+      atp: 'https://site.api.espn.com/apis/site/v2/sports/tennis/atp/scoreboard',
+      wta: 'https://site.api.espn.com/apis/site/v2/sports/tennis/wta/scoreboard'
+    };
+
+    const fallbackMatches = [
+      { tour: 'atp', tournament: 'ATP · Sample match', status: 'Feed unavailable', players: [['Player A', '—', '—', '—'], ['Player B', '—', '—', '—']] }
+    ];
+
+    let currentFilter = 'all';
+    let cachedMatches = [];
+
+    const today = () => {
+      const d = new Date();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${d.getFullYear()}${m}${day}`;
+    };
+
+    const escapeHtml = (value) => String(value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+
+    function setActiveChip(filter) {
+      currentFilter = filter;
+      chips.forEach((chip) => chip.classList.toggle('active', chip.dataset.tour === filter));
+      renderMatches(cachedMatches);
+    }
+
+    function normalizeEvent(event, tour) {
+      const comp = event.competitions?.[0];
+      const competitors = comp?.competitors || [];
+      if (competitors.length < 2) return null;
+
+      const status = comp?.status?.type?.shortDetail || comp?.status?.type?.description || 'Scheduled';
+      const tournament = `${tour.toUpperCase()} · ${event.shortName || event.name || 'Match'}`;
+      const isLive = comp?.status?.type?.state === 'in';
+
+      const rows = competitors.map((c) => {
+        const athlete = c.athlete?.displayName || c.name || 'Player';
+        const lines = c.linescores || [];
+        return [athlete, String(lines[0]?.value ?? '—'), String(lines[1]?.value ?? '—'), String(c.score ?? '—')];
+      });
+
+      return { tour, tournament, status, players: rows, isLive };
+    }
+
+    function renderMatchRow(match) {
+      return `<div class="match" data-tour="${escapeHtml(match.tour)}"><div class="match-meta"><span>${escapeHtml(match.tournament)}</span><span>${escapeHtml(match.status)}</span></div><div class="players">${match.players.map((p)=>`<div class="row"><strong>${escapeHtml(p[0])}</strong><span class="set">${escapeHtml(p[1])}</span><span class="set">${escapeHtml(p[2])}</span><span class="game">${escapeHtml(p[3])}</span></div>`).join('')}</div></div>`;
+    }
+
+    function renderMatches(matches) {
+      const filtered = currentFilter === 'all' ? matches : matches.filter((m) => m.tour === currentFilter);
+      MATCH_CONTAINER.innerHTML = filtered.length ? filtered.map(renderMatchRow).join('') : '<div class="status">No matches for this filter right now.</div>';
+      LIVE_COUNT.textContent = `${matches.filter((m) => m.isLive).length} Live`;
+    }
+
+    async function fetchFeed(tour) {
+      const withDate = `${FEEDS[tour]}?dates=${today()}`;
+      let res = await fetch(withDate);
+      if (!res.ok) res = await fetch(FEEDS[tour]);
+      if (!res.ok) throw new Error(`${tour.toUpperCase()} feed failed (${res.status})`);
+      const data = await res.json();
+      return (data.events || []).map((event) => normalizeEvent(event, tour)).filter(Boolean);
+    }
+
+    async function refreshMatches() {
+      try {
+        STATUS.textContent = 'Fetching live scoreboard feed…';
+        const [atp, wta] = await Promise.all([fetchFeed('atp'), fetchFeed('wta')]);
+        cachedMatches = [...atp, ...wta].sort((a, b) => Number(b.isLive) - Number(a.isLive));
+        if (!cachedMatches.length) throw new Error('No matches in feed');
+        renderMatches(cachedMatches);
+        STATUS.textContent = 'Live feed connected.';
+        UPDATED_AT.textContent = `Last updated: ${new Date().toLocaleString()}`;
+      } catch (error) {
+        cachedMatches = fallbackMatches;
+        renderMatches(cachedMatches);
+        STATUS.textContent = 'Could not reach live feed, showing fallback sample row.';
+        UPDATED_AT.textContent = `Fallback rendered: ${new Date().toLocaleString()}`;
+      }
+    }
+
+    chips.forEach((chip) => chip.addEventListener('click', () => setActiveChip(chip.dataset.tour)));
+    refreshMatches();
+    setInterval(refreshMatches, 60000);
+  </script>
+</body>
+</html>
