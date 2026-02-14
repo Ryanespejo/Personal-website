@@ -423,10 +423,47 @@ def _compute_features(
         "surface_carpet": 1.0 if sl == "carpet" else 0.0,
         "best_of_5": 1.0 if best_of == 5 else 0.0,
     }
+
+    # Compute favorite/underdog stats for each player
+    def _fav_underdog(pid: str):
+        fav_w = fav_l = dog_w = dog_l = 0
+        for m in all_m:
+            wid, lid = m.get("winner_id", ""), m.get("loser_id", "")
+            if wid != pid and lid != pid:
+                continue
+            w_rank = _sf(m.get("winner_rank"), 0)
+            l_rank = _sf(m.get("loser_rank"), 0)
+            if w_rank <= 0 or l_rank <= 0:
+                continue
+            if wid == pid:
+                is_fav = w_rank < l_rank
+                if is_fav:
+                    fav_w += 1
+                else:
+                    dog_w += 1
+            elif lid == pid:
+                is_fav = l_rank < w_rank
+                if is_fav:
+                    fav_l += 1
+                else:
+                    dog_l += 1
+        return {
+            "fav_wins": fav_w, "fav_losses": fav_l,
+            "fav_total": fav_w + fav_l,
+            "fav_win_pct": round(fav_w / (fav_w + fav_l), 4) if (fav_w + fav_l) else 0,
+            "dog_wins": dog_w, "dog_losses": dog_l,
+            "dog_total": dog_w + dog_l,
+            "dog_win_pct": round(dog_w / (dog_w + dog_l), 4) if (dog_w + dog_l) else 0,
+        }
+
+    p1_fav_dog = _fav_underdog(p1_id) if p1_id else None
+    p2_fav_dog = _fav_underdog(p2_id) if p2_id else None
+
     extra = {
         "h2h": {"p1_wins": s1["h2h_w"], "p2_wins": s1["h2h_l"], "total": h2h_t},
         "stats": {"p1": s1, "p2": s2},
         "p1_id": p1_id, "p2_id": p2_id,
+        "fav_underdog": {"p1": p1_fav_dog, "p2": p2_fav_dog},
     }
     return feats, extra
 
@@ -486,6 +523,7 @@ class handler(BaseHTTPRequestHandler):
                     "tour": tour, "surface": surface,
                     "h2h": extra["h2h"],
                     "player_stats": extra["stats"],
+                    "fav_underdog": extra.get("fav_underdog", {}),
                     "custom_analytics": custom,
                     "model_info": {
                         "accuracy": model.get("metadata", {}).get("accuracy"),

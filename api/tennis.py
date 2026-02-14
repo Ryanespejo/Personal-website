@@ -74,6 +74,9 @@ def normalize(comp: dict, tour: str, event_name: str = ''):
         name = (athlete.get('shortName') or athlete.get('displayName') or
                 roster.get('shortDisplayName') or roster.get('displayName') or
                 c.get('name') or 'Player')
+        full_name = (athlete.get('displayName') or athlete.get('shortName') or
+                     roster.get('displayName') or roster.get('shortDisplayName') or
+                     c.get('name') or 'Player')
         lines = c.get('linescores') or []
         sets = []
         for line in lines:
@@ -84,6 +87,7 @@ def normalize(comp: dict, tour: str, event_name: str = ''):
         serving = bool(c_status.get('isCurrent'))
         players.append({
             'name': name,
+            'fullName': full_name,
             'sets': sets,
             'game': game,
             'serving': serving,

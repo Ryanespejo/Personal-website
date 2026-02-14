@@ -361,6 +361,40 @@
     }
     .ml-msg { font-size: 0.75rem; color: var(--muted); font-style: italic; }
 
+    /* Favorite vs Underdog graph */
+    .fav-dog-row { margin-bottom: 0.7rem; }
+    .fav-dog-row:last-child { margin-bottom: 0; }
+    .fav-dog-name { font-size: 0.78rem; font-weight: 500; margin-bottom: 0.3rem; }
+    .fav-dog-bars { display: flex; flex-direction: column; gap: 0.3rem; }
+    .fav-dog-bar-wrap { display: flex; align-items: center; gap: 0.45rem; }
+    .fav-dog-label { font-size: 0.68rem; color: var(--muted); min-width: 4.8rem; text-transform: uppercase; letter-spacing: 0.04em; flex-shrink: 0; }
+    .fav-dog-track {
+      flex: 1; height: 14px; border-radius: 4px; background: var(--line);
+      overflow: hidden; display: flex; position: relative;
+    }
+    .fav-dog-fill-w {
+      height: 100%; border-radius: 4px 0 0 4px; transition: width 0.6s ease;
+    }
+    .fav-dog-fill-l {
+      height: 100%; transition: width 0.6s ease;
+    }
+    .fav-dog-fill-w.fav { background: var(--accent); }
+    .fav-dog-fill-l.fav { background: rgba(255,106,123,0.45); }
+    .fav-dog-fill-w.dog { background: var(--gold); }
+    .fav-dog-fill-l.dog { background: rgba(255,106,123,0.45); }
+    .fav-dog-stat {
+      font-size: 0.68rem; color: var(--muted); min-width: 5.5rem; text-align: right; flex-shrink: 0;
+      font-variant-numeric: tabular-nums;
+    }
+    .fav-dog-legend {
+      display: flex; gap: 0.8rem; margin-top: 0.55rem; font-size: 0.65rem; color: var(--muted);
+    }
+    .fav-dog-legend-dot {
+      display: inline-block; width: 8px; height: 8px; border-radius: 2px;
+      margin-right: 0.25rem; vertical-align: middle;
+    }
+    .fav-dog-msg { font-size: 0.75rem; color: var(--muted); font-style: italic; }
+
     @media (max-width: 920px) {
       .layout { grid-template-columns: 1fr; }
       .insights-panel { position: static; }
@@ -808,6 +842,51 @@
           ${(customP1 != null && customP2 != null) ? `<div class="ml-model-info">Custom model: ${name1} ${customP1}% · ${customP2}% ${name2}</div>` : ''}
           ${(ensP1 != null && ensP2 != null) ? `<div class="ml-model-info">Ensemble blend: ${name1} ${ensP1}% · ${ensP2}% ${name2}</div>` : ''}`;
 
+        // Render favorite vs underdog graph
+        const favDogEl = document.getElementById('fav-dog-body');
+        const favDog = d.fav_underdog || {};
+        if (favDogEl) {
+          const renderPlayerFavDog = (pName, stats, pIdx) => {
+            if (!stats || (!stats.fav_total && !stats.dog_total))
+              return `<div class="fav-dog-row"><div class="fav-dog-name">${pName}</div><span class="fav-dog-msg">No ranking data available</span></div>`;
+            const favTotal = stats.fav_total || 0;
+            const dogTotal = stats.dog_total || 0;
+            const favWPct = favTotal ? Math.round((stats.fav_wins / favTotal) * 100) : 0;
+            const favLPct = favTotal ? 100 - favWPct : 0;
+            const dogWPct = dogTotal ? Math.round((stats.dog_wins / dogTotal) * 100) : 0;
+            const dogLPct = dogTotal ? 100 - dogWPct : 0;
+            return `<div class="fav-dog-row">
+              <div class="fav-dog-name">${pName}</div>
+              <div class="fav-dog-bars">
+                <div class="fav-dog-bar-wrap">
+                  <span class="fav-dog-label">Favorite</span>
+                  <div class="fav-dog-track">
+                    <div class="fav-dog-fill-w fav" style="width:${favWPct}%"></div>
+                    <div class="fav-dog-fill-l fav" style="width:${favLPct}%"></div>
+                  </div>
+                  <span class="fav-dog-stat">${stats.fav_wins}W-${stats.fav_losses}L (${favWPct}%)</span>
+                </div>
+                <div class="fav-dog-bar-wrap">
+                  <span class="fav-dog-label">Underdog</span>
+                  <div class="fav-dog-track">
+                    <div class="fav-dog-fill-w dog" style="width:${dogWPct}%"></div>
+                    <div class="fav-dog-fill-l dog" style="width:${dogLPct}%"></div>
+                  </div>
+                  <span class="fav-dog-stat">${stats.dog_wins}W-${stats.dog_losses}L (${dogWPct}%)</span>
+                </div>
+              </div>
+            </div>`;
+          };
+          const p1FD = renderPlayerFavDog(name1, favDog.p1, 0);
+          const p2FD = renderPlayerFavDog(name2, favDog.p2, 1);
+          favDogEl.innerHTML = p1FD + p2FD +
+            `<div class="fav-dog-legend">
+              <span><span class="fav-dog-legend-dot" style="background:var(--accent)"></span>Win</span>
+              <span><span class="fav-dog-legend-dot" style="background:rgba(255,106,123,0.45)"></span>Loss</span>
+              <span><span class="fav-dog-legend-dot" style="background:var(--gold)"></span>Upset win</span>
+            </div>`;
+        }
+
         // Update H2H section with historical data from backend
         const h2h = d.h2h;
         if (h2h && (h2h.p1_wins || h2h.p2_wins || h2h.total)) {
@@ -939,6 +1018,11 @@
         <div class="ml-section" id="ml-section">
           <div class="ml-title">ML Prediction <span class="ml-badge">BETA</span></div>
           <div id="ml-body"><span class="ml-msg">Analyzing…</span></div>
+        </div>
+
+        <div class="ins-section" id="fav-dog-section">
+          <div class="ins-title">Favorite vs Underdog Record</div>
+          <div id="fav-dog-body"><span class="fav-dog-msg">Loading…</span></div>
         </div>
 
         <div class="ins-section" id="pred-section">
