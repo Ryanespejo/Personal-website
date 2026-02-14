@@ -807,8 +807,32 @@
           <div class="ml-model-info">RapidAPI daily cache: ${rapidEnabled ? 'enabled (24h)' : 'disabled (set RAPIDAPI_KEY)'}</div>
           ${(customP1 != null && customP2 != null) ? `<div class="ml-model-info">Custom model: ${name1} ${customP1}% · ${customP2}% ${name2}</div>` : ''}
           ${(ensP1 != null && ensP2 != null) ? `<div class="ml-model-info">Ensemble blend: ${name1} ${ensP1}% · ${ensP2}% ${name2}</div>` : ''}`;
+
+        // Update H2H section with historical data from backend
+        const h2h = d.h2h;
+        if (h2h && (h2h.p1_wins || h2h.p2_wins || h2h.total)) {
+          const labelsEl = document.getElementById('h2h-labels');
+          const barEl    = document.getElementById('h2h-bar');
+          const noteEl   = document.getElementById('h2h-note');
+          if (labelsEl) labelsEl.innerHTML = `<span>${h2h.p1_wins}</span><span>${h2h.p2_wins}</span>`;
+          if (barEl) {
+            const bf1 = Math.max(h2h.p1_wins, 0.5);
+            const bf2 = Math.max(h2h.p2_wins, 0.5);
+            barEl.innerHTML = `<div class="h2h-seg p1" style="flex:${bf1}"></div><div class="h2h-seg p2" style="flex:${bf2}"></div>`;
+          }
+          if (noteEl) noteEl.textContent = `${h2h.total} meeting${h2h.total > 1 ? 's' : ''} (Sackmann + RapidAPI)`;
+        } else {
+          const noteEl = document.getElementById('h2h-note');
+          if (noteEl && noteEl.textContent.includes('Fetching')) {
+            noteEl.textContent = 'No previous meetings found';
+          }
+        }
       } catch (_) {
         if (el) el.innerHTML = '<span class="ml-msg">ML prediction unavailable</span>';
+        const noteEl = document.getElementById('h2h-note');
+        if (noteEl && noteEl.textContent.includes('Fetching')) {
+          noteEl.textContent = 'No previous meetings in current data';
+        }
       }
     }
 
@@ -887,19 +911,19 @@
           <div id="rank-body"><span class="rank-msg">Fetching…</span></div>
         </div>
 
-        <div class="ins-section">
+        <div class="ins-section" id="h2h-section">
           <div class="ins-title">Head to Head</div>
-          <div class="h2h-labels">
+          <div class="h2h-labels" id="h2h-labels">
             <span>${h2h.wins1}</span>
             <span>${h2h.wins2}</span>
           </div>
-          <div class="h2h-bar">
+          <div class="h2h-bar" id="h2h-bar">
             <div class="h2h-seg p1" style="flex:${f1}"></div>
             <div class="h2h-seg p2" style="flex:${f2}"></div>
           </div>
-          <div class="h2h-note">${h2h.total
+          <div class="h2h-note" id="h2h-note">${h2h.total
             ? `${h2h.total} meeting${h2h.total > 1 ? 's' : ''} in current data`
-            : 'No previous meetings in current data'}</div>
+            : 'Fetching historical H2H…'}</div>
         </div>
 
         <div class="ins-section">
