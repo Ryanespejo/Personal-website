@@ -848,15 +848,16 @@
         if (favDogEl) {
           const renderPlayerFavDog = (pName, stats, pIdx) => {
             if (!stats || (!stats.fav_total && !stats.dog_total))
-              return `<div class="fav-dog-row"><div class="fav-dog-name">${pName}</div><span class="fav-dog-msg">No ranking data available</span></div>`;
+              return `<div class="fav-dog-row"><div class="fav-dog-name">${pName}</div><span class="fav-dog-msg">No data available</span></div>`;
             const favTotal = stats.fav_total || 0;
             const dogTotal = stats.dog_total || 0;
             const favWPct = favTotal ? Math.round((stats.fav_wins / favTotal) * 100) : 0;
             const favLPct = favTotal ? 100 - favWPct : 0;
             const dogWPct = dogTotal ? Math.round((stats.dog_wins / dogTotal) * 100) : 0;
             const dogLPct = dogTotal ? 100 - dogWPct : 0;
+            const eloLabel = stats.current_elo ? ` — Elo ${stats.current_elo}` : '';
             return `<div class="fav-dog-row">
-              <div class="fav-dog-name">${pName}</div>
+              <div class="fav-dog-name">${pName}${eloLabel ? `<span style="font-weight:400;color:var(--muted);font-size:0.7rem">${eloLabel}</span>` : ''}</div>
               <div class="fav-dog-bars">
                 <div class="fav-dog-bar-wrap">
                   <span class="fav-dog-label">Favorite</span>
@@ -1025,7 +1026,7 @@
         </div>
 
         <div class="ins-section" id="fav-dog-section">
-          <div class="ins-title">Favorite vs Underdog Record</div>
+          <div class="ins-title">Favorite vs Underdog Record <span style="font-weight:400;opacity:0.7">(Elo-based)</span></div>
           <div id="fav-dog-body"><span class="fav-dog-msg">Loading…</span></div>
         </div>
 

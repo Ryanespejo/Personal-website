@@ -35,9 +35,8 @@ RAPIDAPI_BASE_URL = os.getenv("RAPIDAPI_TENNIS_BASE_URL", "https://tennisapi1.p.
 RAPIDAPI_HOST = os.getenv("RAPIDAPI_TENNIS_HOST", "tennisapi1.p.rapidapi.com")
 RAPIDAPI_KEY = os.getenv("RAPIDAPI_KEY", "4d185181bemsh8dd69666ef3eb9dp1c9db0jsn1ac0970d3911")
 RAPIDAPI_SEARCH_PATH = os.getenv("RAPIDAPI_TENNIS_SEARCH_PATH", "/api/tennis/search/{query}")
-RAPIDAPI_PLAYER_STATS_PATH = os.getenv("RAPIDAPI_TENNIS_PLAYER_STATS_PATH", "/api/tennis/player/{player_id}/stats")
-RAPIDAPI_H2H_PATH = os.getenv("RAPIDAPI_TENNIS_H2H_PATH", "/api/tennis/h2h/{player1_id}/{player2_id}")
-RAPIDAPI_LAST_MATCHES_PATH = os.getenv("RAPIDAPI_TENNIS_LAST_MATCHES_PATH", "/api/tennis/player/{player_id}/last-matches/{page}")
+RAPIDAPI_PLAYER_PATH = os.getenv("RAPIDAPI_TENNIS_PLAYER_PATH", "/api/tennis/player/{player_id}")
+RAPIDAPI_PREV_EVENTS_PATH = os.getenv("RAPIDAPI_TENNIS_PREV_EVENTS_PATH", "/api/tennis/player/{player_id}/events/previous/{page}")
 RAPIDAPI_TIMEOUT = 10
 RAPID_CACHE_PATH = pathlib.Path("/tmp/rapid_tennis_cache.json")
 
@@ -169,36 +168,28 @@ def _rapid_find_player_id(name: str) -> str:
         return _rapid_fetch_json(path)
 
     data = _rapid_daily(f"search::{q.lower()}", _loader)
-    candidates = data.get("players") or data.get("results") or data.get("data") or []
+    candidates = data.get("results") or data.get("players") or data.get("data") or []
     if isinstance(candidates, dict):
         candidates = candidates.get("players") or []
     for c in candidates[:5]:
-        pid = c.get("id") or c.get("player_id") or c.get("playerId")
+        # API wraps player data inside "entity" object
+        entity = c.get("entity") or c
+        pid = entity.get("id") or entity.get("player_id") or entity.get("playerId")
         if pid is not None:
             return str(pid)
     return ""
 
 
-def _rapid_player_stats(player_id: str) -> dict:
+def _rapid_player_detail(player_id: str) -> dict:
+    """Fetch player detail (ranking, name, etc.) from /api/tennis/player/{id}."""
     if not player_id:
         return {}
 
     def _loader():
-        path = RAPIDAPI_PLAYER_STATS_PATH.format(player_id=player_id)
+        path = RAPIDAPI_PLAYER_PATH.format(player_id=player_id)
         return _rapid_fetch_json(path)
 
-    return _rapid_daily(f"player_stats::{player_id}", _loader)
-
-
-def _rapid_h2h(player1_id: str, player2_id: str) -> dict:
-    if not player1_id or not player2_id:
-        return {}
-
-    def _loader():
-        path = RAPIDAPI_H2H_PATH.format(player1_id=player1_id, player2_id=player2_id)
-        return _rapid_fetch_json(path)
-
-    return _rapid_daily(f"h2h::{player1_id}::{player2_id}", _loader)
+    return _rapid_daily(f"player_detail::{player_id}", _loader)
 
 
 def _rapid_player_matches(player_id: str, page: int = 0) -> dict:
@@ -206,64 +197,86 @@ def _rapid_player_matches(player_id: str, page: int = 0) -> dict:
         return {}
 
     def _loader():
-        path = RAPIDAPI_LAST_MATCHES_PATH.format(player_id=player_id, page=page)
+        path = RAPIDAPI_PREV_EVENTS_PATH.format(player_id=player_id, page=page)
         return _rapid_fetch_json(path)
 
-    return _rapid_daily(f"last_matches::{player_id}::{page}", _loader)
+    return _rapid_daily(f"prev_events::{player_id}::{page}", _loader)
+
+
+def _rank_to_elo(rank: float) -> float:
+    """Convert ATP/WTA ranking to approximate Elo rating.
+
+    Uses a logarithmic mapping so the gap between #1 and #5 is larger
+    than between #95 and #100, reflecting actual skill distribution.
+    Calibrated: #1 ≈ 2150, #10 ≈ 1870, #50 ≈ 1660, #100 ≈ 1570, #500 ≈ 1330.
+    """
+    if rank <= 0:
+        return 1500.0
+    return max(2150 - 120 * math.log(rank), 1200.0)
+
+
+ELO_K = 32  # standard K-factor for tennis
 
 
 def _rapid_fav_underdog(player_id: str) -> dict | None:
-    """Compute favorite/underdog record from RapidAPI match history."""
+    """Compute favorite/underdog record from RapidAPI match history using Elo."""
     if not player_id or not RAPIDAPI_KEY:
         return None
 
     raw = _rapid_player_matches(player_id)
-    events = raw.get("events") or raw.get("matches") or raw.get("results") or []
+    events = raw.get("events") or []
     if not events:
         return None
 
+    # Sort oldest-first so Elo accumulates chronologically
+    sorted_ev = sorted(events, key=lambda e: e.get("startTimestamp") or 0)
+
+    # Initialize player Elo from their ranking in the earliest match
+    player_elo = 1500.0
+    for ev in sorted_ev:
+        home = ev.get("homeTeam") or {}
+        away = ev.get("awayTeam") or {}
+        hid = str(home.get("id") or "")
+        aid = str(away.get("id") or "")
+        if hid == player_id:
+            r = _sf(home.get("ranking"), 0)
+        elif aid == player_id:
+            r = _sf(away.get("ranking"), 0)
+        else:
+            continue
+        if r > 0:
+            player_elo = _rank_to_elo(r)
+            break
+
     fav_w = fav_l = dog_w = dog_l = 0
-    for ev in events:
-        # Each event has homeTeam/awayTeam or homePlayer/awayPlayer with ranking
-        home = ev.get("homeTeam") or ev.get("homePlayer") or {}
-        away = ev.get("awayTeam") or ev.get("awayPlayer") or {}
+    for ev in sorted_ev:
+        home = ev.get("homeTeam") or {}
+        away = ev.get("awayTeam") or {}
         home_id = str(home.get("id") or "")
         away_id = str(away.get("id") or "")
-        # Determine which side is our player
+
         if home_id == player_id:
-            my_team, opp_team = home, away
+            opp_rank = _sf(away.get("ranking"), 0)
         elif away_id == player_id:
-            my_team, opp_team = away, home
+            opp_rank = _sf(home.get("ranking"), 0)
         else:
             continue
 
-        # Get rankings — try multiple field patterns
-        my_rank = _sf(my_team.get("ranking") or my_team.get("rank") or
-                      my_team.get("seedRanking") or my_team.get("worldRanking"), 0)
-        opp_rank = _sf(opp_team.get("ranking") or opp_team.get("rank") or
-                       opp_team.get("seedRanking") or opp_team.get("worldRanking"), 0)
+        if opp_rank <= 0:
+            continue  # skip doubles / unranked
+        opp_elo = _rank_to_elo(opp_rank)
 
-        # Determine winner from score or status
-        winner_code = ev.get("winnerCode")  # 1=home, 2=away
-        home_score = _sf((ev.get("homeScore") or {}).get("current"), -1)
-        away_score = _sf((ev.get("awayScore") or {}).get("current"), -1)
-        if winner_code == 1:
+        # Determine winner
+        wc = ev.get("winnerCode")
+        if wc == 1:
             won = (home_id == player_id)
-        elif winner_code == 2:
+        elif wc == 2:
             won = (away_id == player_id)
-        elif home_score >= 0 and away_score >= 0:
-            if home_id == player_id:
-                won = home_score > away_score
-            else:
-                won = away_score > home_score
         else:
-            continue  # can't determine winner
-
-        if my_rank > 0 and opp_rank > 0:
-            is_fav = my_rank < opp_rank  # lower rank number = favorite
-        else:
-            # No ranking data — skip for favorite/underdog breakdown
             continue
+
+        # Favorite = higher Elo (captures form, not just ranking)
+        is_fav = player_elo > opp_elo
 
         if is_fav:
             if won:
@@ -276,6 +289,10 @@ def _rapid_fav_underdog(player_id: str) -> dict | None:
             else:
                 dog_l += 1
 
+        # Update running Elo
+        expected = 1.0 / (1.0 + math.pow(10, (opp_elo - player_elo) / 400))
+        player_elo += ELO_K * ((1.0 if won else 0.0) - expected)
+
     if (fav_w + fav_l + dog_w + dog_l) == 0:
         return None
 
@@ -286,15 +303,36 @@ def _rapid_fav_underdog(player_id: str) -> dict | None:
         "dog_wins": dog_w, "dog_losses": dog_l,
         "dog_total": dog_w + dog_l,
         "dog_win_pct": round(dog_w / (dog_w + dog_l), 4) if (dog_w + dog_l) else 0,
+        "current_elo": round(player_elo),
         "source": "rapidapi",
     }
 
 
-def _extract_rapid_metrics(stats: dict, fallback_rank: float, fallback_points: float) -> dict:
-    rank = _sf(stats.get("rank") or stats.get("ranking") or stats.get("worldRank"), fallback_rank or 500)
-    points = _sf(stats.get("points") or stats.get("rankingPoints"), fallback_points)
-    wins = _sf(stats.get("wins") or stats.get("win"), 0)
-    losses = _sf(stats.get("losses") or stats.get("loss"), 0)
+def _extract_rapid_metrics(detail: dict, match_events: list, fallback_rank: float, fallback_points: float) -> dict:
+    """Extract player metrics from /player/{id} detail and match history."""
+    # Player detail returns {"team": {"ranking": N, ...}, "pregameForm": ...}
+    team = detail.get("team") or detail
+    rank = _sf(team.get("ranking") or team.get("rank"), fallback_rank or 500)
+    points = _sf(team.get("points") or team.get("rankingPoints"), fallback_points)
+    # Compute W/L from match history since the stats endpoint doesn't exist
+    pid = str(team.get("id") or "")
+    wins = losses = 0
+    for ev in match_events:
+        home = ev.get("homeTeam") or {}
+        away = ev.get("awayTeam") or {}
+        wc = ev.get("winnerCode")
+        if not wc:
+            continue
+        if str(home.get("id") or "") == pid:
+            if wc == 1:
+                wins += 1
+            else:
+                losses += 1
+        elif str(away.get("id") or "") == pid:
+            if wc == 2:
+                wins += 1
+            else:
+                losses += 1
     total = wins + losses
     win_rate = wins / total if total else 0.5
     return {
@@ -306,17 +344,55 @@ def _extract_rapid_metrics(stats: dict, fallback_rank: float, fallback_points: f
     }
 
 
+def _rapid_h2h_from_matches(p1_id: str, p2_id: str, p1_events: list, p2_events: list) -> dict:
+    """Compute H2H record from both players' match histories."""
+    p1_wins = p2_wins = 0
+    seen = set()
+    for ev in p1_events + p2_events:
+        eid = ev.get("id")
+        if eid in seen:
+            continue
+        seen.add(eid)
+        home = ev.get("homeTeam") or {}
+        away = ev.get("awayTeam") or {}
+        hid = str(home.get("id") or "")
+        aid = str(away.get("id") or "")
+        # Only count matches between p1 and p2
+        if not ({hid, aid} == {p1_id, p2_id}):
+            continue
+        wc = ev.get("winnerCode")
+        if wc == 1:
+            winner_id = hid
+        elif wc == 2:
+            winner_id = aid
+        else:
+            continue
+        if winner_id == p1_id:
+            p1_wins += 1
+        elif winner_id == p2_id:
+            p2_wins += 1
+    return {"p1_wins": p1_wins, "p2_wins": p2_wins, "total": p1_wins + p2_wins}
+
+
 def _custom_analytics(p1_name: str, p2_name: str, p1_rank: float, p2_rank: float, p1_points: float, p2_points: float) -> dict:
     p1_id = _rapid_find_player_id(p1_name)
     p2_id = _rapid_find_player_id(p2_name)
-    s1 = _extract_rapid_metrics(_rapid_player_stats(p1_id), p1_rank, p1_points)
-    s2 = _extract_rapid_metrics(_rapid_player_stats(p2_id), p2_rank, p2_points)
-    h2h_raw = _rapid_h2h(p1_id, p2_id)
 
-    p1_h2h_wins = _sf(h2h_raw.get("player1Wins") or h2h_raw.get("wins1"), 0)
-    p2_h2h_wins = _sf(h2h_raw.get("player2Wins") or h2h_raw.get("wins2"), 0)
-    h2h_total = p1_h2h_wins + p2_h2h_wins
-    h2h_ratio = p1_h2h_wins / h2h_total if h2h_total else 0.5
+    # Fetch player details and match histories
+    p1_detail = _rapid_player_detail(p1_id)
+    p2_detail = _rapid_player_detail(p2_id)
+    p1_matches_raw = _rapid_player_matches(p1_id)
+    p2_matches_raw = _rapid_player_matches(p2_id)
+    p1_events = (p1_matches_raw.get("events") or [])
+    p2_events = (p2_matches_raw.get("events") or [])
+
+    s1 = _extract_rapid_metrics(p1_detail, p1_events, p1_rank, p1_points)
+    s2 = _extract_rapid_metrics(p2_detail, p2_events, p2_rank, p2_points)
+
+    # Compute H2H from match histories (no dedicated H2H endpoint)
+    h2h = _rapid_h2h_from_matches(p1_id, p2_id, p1_events, p2_events)
+    h2h_total = h2h["total"]
+    h2h_ratio = h2h["p1_wins"] / h2h_total if h2h_total else 0.5
 
     # Simple Elo-inspired custom score combining rank, points, W/L and H2H.
     rank_gap = s2["rank"] - s1["rank"]
@@ -337,9 +413,9 @@ def _custom_analytics(p1_name: str, p2_name: str, p1_rank: float, p2_rank: float
         "player_ids": {"p1": p1_id, "p2": p2_id},
         "player_stats": {"p1": s1, "p2": s2},
         "h2h": {
-            "p1_wins": int(p1_h2h_wins),
-            "p2_wins": int(p2_h2h_wins),
-            "total": int(h2h_total),
+            "p1_wins": h2h["p1_wins"],
+            "p2_wins": h2h["p2_wins"],
+            "total": h2h_total,
         },
         "fav_underdog": {"p1": p1_fav_dog, "p2": p2_fav_dog},
         "custom_model": {
@@ -520,29 +596,57 @@ def _compute_features(
         "best_of_5": 1.0 if best_of == 5 else 0.0,
     }
 
-    # Compute favorite/underdog stats for each player
+    # Compute favorite/underdog stats using Elo (adjusts for form, not just ranking)
     def _fav_underdog(pid: str):
+        # Initialize Elo from the player's earliest available ranking
+        elo = 1500.0
+        for m in all_m:
+            wid, lid = m.get("winner_id", ""), m.get("loser_id", "")
+            if wid == pid:
+                r = _sf(m.get("winner_rank"), 0)
+                if r > 0:
+                    elo = _rank_to_elo(r)
+                    break
+            elif lid == pid:
+                r = _sf(m.get("loser_rank"), 0)
+                if r > 0:
+                    elo = _rank_to_elo(r)
+                    break
+
         fav_w = fav_l = dog_w = dog_l = 0
         for m in all_m:
             wid, lid = m.get("winner_id", ""), m.get("loser_id", "")
             if wid != pid and lid != pid:
                 continue
-            w_rank = _sf(m.get("winner_rank"), 0)
-            l_rank = _sf(m.get("loser_rank"), 0)
-            if w_rank <= 0 or l_rank <= 0:
-                continue
             if wid == pid:
-                is_fav = w_rank < l_rank
-                if is_fav:
+                opp_rank = _sf(m.get("loser_rank"), 0)
+                won = True
+            else:
+                opp_rank = _sf(m.get("winner_rank"), 0)
+                won = False
+            if opp_rank <= 0:
+                continue
+            opp_elo = _rank_to_elo(opp_rank)
+
+            # Favorite = higher Elo
+            is_fav = elo > opp_elo
+            if is_fav:
+                if won:
                     fav_w += 1
                 else:
-                    dog_w += 1
-            elif lid == pid:
-                is_fav = l_rank < w_rank
-                if is_fav:
                     fav_l += 1
+            else:
+                if won:
+                    dog_w += 1
                 else:
                     dog_l += 1
+
+            # Update running Elo after this match
+            expected = 1.0 / (1.0 + math.pow(10, (opp_elo - elo) / 400))
+            elo += ELO_K * ((1.0 if won else 0.0) - expected)
+
+        if (fav_w + fav_l + dog_w + dog_l) == 0:
+            return None
         return {
             "fav_wins": fav_w, "fav_losses": fav_l,
             "fav_total": fav_w + fav_l,
@@ -550,6 +654,7 @@ def _compute_features(
             "dog_wins": dog_w, "dog_losses": dog_l,
             "dog_total": dog_w + dog_l,
             "dog_win_pct": round(dog_w / (dog_w + dog_l), 4) if (dog_w + dog_l) else 0,
+            "current_elo": round(elo),
         }
 
     p1_fav_dog = _fav_underdog(p1_id) if p1_id else None
