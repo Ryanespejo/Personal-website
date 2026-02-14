@@ -35,9 +35,8 @@ RAPIDAPI_BASE_URL = os.getenv("RAPIDAPI_TENNIS_BASE_URL", "https://tennisapi1.p.
 RAPIDAPI_HOST = os.getenv("RAPIDAPI_TENNIS_HOST", "tennisapi1.p.rapidapi.com")
 RAPIDAPI_KEY = os.getenv("RAPIDAPI_KEY", "4d185181bemsh8dd69666ef3eb9dp1c9db0jsn1ac0970d3911")
 RAPIDAPI_SEARCH_PATH = os.getenv("RAPIDAPI_TENNIS_SEARCH_PATH", "/api/tennis/search/{query}")
-RAPIDAPI_PLAYER_STATS_PATH = os.getenv("RAPIDAPI_TENNIS_PLAYER_STATS_PATH", "/api/tennis/player/{player_id}/stats")
-RAPIDAPI_H2H_PATH = os.getenv("RAPIDAPI_TENNIS_H2H_PATH", "/api/tennis/h2h/{player1_id}/{player2_id}")
-RAPIDAPI_LAST_MATCHES_PATH = os.getenv("RAPIDAPI_TENNIS_LAST_MATCHES_PATH", "/api/tennis/player/{player_id}/last-matches/{page}")
+RAPIDAPI_PLAYER_PATH = os.getenv("RAPIDAPI_TENNIS_PLAYER_PATH", "/api/tennis/player/{player_id}")
+RAPIDAPI_PREV_EVENTS_PATH = os.getenv("RAPIDAPI_TENNIS_PREV_EVENTS_PATH", "/api/tennis/player/{player_id}/events/previous/{page}")
 RAPIDAPI_TIMEOUT = 10
 RAPID_CACHE_PATH = pathlib.Path("/tmp/rapid_tennis_cache.json")
 
@@ -169,36 +168,28 @@ def _rapid_find_player_id(name: str) -> str:
         return _rapid_fetch_json(path)
 
     data = _rapid_daily(f"search::{q.lower()}", _loader)
-    candidates = data.get("players") or data.get("results") or data.get("data") or []
+    candidates = data.get("results") or data.get("players") or data.get("data") or []
     if isinstance(candidates, dict):
         candidates = candidates.get("players") or []
     for c in candidates[:5]:
-        pid = c.get("id") or c.get("player_id") or c.get("playerId")
+        # API wraps player data inside "entity" object
+        entity = c.get("entity") or c
+        pid = entity.get("id") or entity.get("player_id") or entity.get("playerId")
         if pid is not None:
             return str(pid)
     return ""
 
 
-def _rapid_player_stats(player_id: str) -> dict:
+def _rapid_player_detail(player_id: str) -> dict:
+    """Fetch player detail (ranking, name, etc.) from /api/tennis/player/{id}."""
     if not player_id:
         return {}
 
     def _loader():
-        path = RAPIDAPI_PLAYER_STATS_PATH.format(player_id=player_id)
+        path = RAPIDAPI_PLAYER_PATH.format(player_id=player_id)
         return _rapid_fetch_json(path)
 
-    return _rapid_daily(f"player_stats::{player_id}", _loader)
-
-
-def _rapid_h2h(player1_id: str, player2_id: str) -> dict:
-    if not player1_id or not player2_id:
-        return {}
-
-    def _loader():
-        path = RAPIDAPI_H2H_PATH.format(player1_id=player1_id, player2_id=player2_id)
-        return _rapid_fetch_json(path)
-
-    return _rapid_daily(f"h2h::{player1_id}::{player2_id}", _loader)
+    return _rapid_daily(f"player_detail::{player_id}", _loader)
 
 
 def _rapid_player_matches(player_id: str, page: int = 0) -> dict:
@@ -206,10 +197,10 @@ def _rapid_player_matches(player_id: str, page: int = 0) -> dict:
         return {}
 
     def _loader():
-        path = RAPIDAPI_LAST_MATCHES_PATH.format(player_id=player_id, page=page)
+        path = RAPIDAPI_PREV_EVENTS_PATH.format(player_id=player_id, page=page)
         return _rapid_fetch_json(path)
 
-    return _rapid_daily(f"last_matches::{player_id}::{page}", _loader)
+    return _rapid_daily(f"prev_events::{player_id}::{page}", _loader)
 
 
 def _rapid_fav_underdog(player_id: str) -> dict | None:
@@ -290,11 +281,31 @@ def _rapid_fav_underdog(player_id: str) -> dict | None:
     }
 
 
-def _extract_rapid_metrics(stats: dict, fallback_rank: float, fallback_points: float) -> dict:
-    rank = _sf(stats.get("rank") or stats.get("ranking") or stats.get("worldRank"), fallback_rank or 500)
-    points = _sf(stats.get("points") or stats.get("rankingPoints"), fallback_points)
-    wins = _sf(stats.get("wins") or stats.get("win"), 0)
-    losses = _sf(stats.get("losses") or stats.get("loss"), 0)
+def _extract_rapid_metrics(detail: dict, match_events: list, fallback_rank: float, fallback_points: float) -> dict:
+    """Extract player metrics from /player/{id} detail and match history."""
+    # Player detail returns {"team": {"ranking": N, ...}, "pregameForm": ...}
+    team = detail.get("team") or detail
+    rank = _sf(team.get("ranking") or team.get("rank"), fallback_rank or 500)
+    points = _sf(team.get("points") or team.get("rankingPoints"), fallback_points)
+    # Compute W/L from match history since the stats endpoint doesn't exist
+    pid = str(team.get("id") or "")
+    wins = losses = 0
+    for ev in match_events:
+        home = ev.get("homeTeam") or {}
+        away = ev.get("awayTeam") or {}
+        wc = ev.get("winnerCode")
+        if not wc:
+            continue
+        if str(home.get("id") or "") == pid:
+            if wc == 1:
+                wins += 1
+            else:
+                losses += 1
+        elif str(away.get("id") or "") == pid:
+            if wc == 2:
+                wins += 1
+            else:
+                losses += 1
     total = wins + losses
     win_rate = wins / total if total else 0.5
     return {
@@ -306,17 +317,55 @@ def _extract_rapid_metrics(stats: dict, fallback_rank: float, fallback_points: f
     }
 
 
+def _rapid_h2h_from_matches(p1_id: str, p2_id: str, p1_events: list, p2_events: list) -> dict:
+    """Compute H2H record from both players' match histories."""
+    p1_wins = p2_wins = 0
+    seen = set()
+    for ev in p1_events + p2_events:
+        eid = ev.get("id")
+        if eid in seen:
+            continue
+        seen.add(eid)
+        home = ev.get("homeTeam") or {}
+        away = ev.get("awayTeam") or {}
+        hid = str(home.get("id") or "")
+        aid = str(away.get("id") or "")
+        # Only count matches between p1 and p2
+        if not ({hid, aid} == {p1_id, p2_id}):
+            continue
+        wc = ev.get("winnerCode")
+        if wc == 1:
+            winner_id = hid
+        elif wc == 2:
+            winner_id = aid
+        else:
+            continue
+        if winner_id == p1_id:
+            p1_wins += 1
+        elif winner_id == p2_id:
+            p2_wins += 1
+    return {"p1_wins": p1_wins, "p2_wins": p2_wins, "total": p1_wins + p2_wins}
+
+
 def _custom_analytics(p1_name: str, p2_name: str, p1_rank: float, p2_rank: float, p1_points: float, p2_points: float) -> dict:
     p1_id = _rapid_find_player_id(p1_name)
     p2_id = _rapid_find_player_id(p2_name)
-    s1 = _extract_rapid_metrics(_rapid_player_stats(p1_id), p1_rank, p1_points)
-    s2 = _extract_rapid_metrics(_rapid_player_stats(p2_id), p2_rank, p2_points)
-    h2h_raw = _rapid_h2h(p1_id, p2_id)
 
-    p1_h2h_wins = _sf(h2h_raw.get("player1Wins") or h2h_raw.get("wins1"), 0)
-    p2_h2h_wins = _sf(h2h_raw.get("player2Wins") or h2h_raw.get("wins2"), 0)
-    h2h_total = p1_h2h_wins + p2_h2h_wins
-    h2h_ratio = p1_h2h_wins / h2h_total if h2h_total else 0.5
+    # Fetch player details and match histories
+    p1_detail = _rapid_player_detail(p1_id)
+    p2_detail = _rapid_player_detail(p2_id)
+    p1_matches_raw = _rapid_player_matches(p1_id)
+    p2_matches_raw = _rapid_player_matches(p2_id)
+    p1_events = (p1_matches_raw.get("events") or [])
+    p2_events = (p2_matches_raw.get("events") or [])
+
+    s1 = _extract_rapid_metrics(p1_detail, p1_events, p1_rank, p1_points)
+    s2 = _extract_rapid_metrics(p2_detail, p2_events, p2_rank, p2_points)
+
+    # Compute H2H from match histories (no dedicated H2H endpoint)
+    h2h = _rapid_h2h_from_matches(p1_id, p2_id, p1_events, p2_events)
+    h2h_total = h2h["total"]
+    h2h_ratio = h2h["p1_wins"] / h2h_total if h2h_total else 0.5
 
     # Simple Elo-inspired custom score combining rank, points, W/L and H2H.
     rank_gap = s2["rank"] - s1["rank"]
@@ -337,9 +386,9 @@ def _custom_analytics(p1_name: str, p2_name: str, p1_rank: float, p2_rank: float
         "player_ids": {"p1": p1_id, "p2": p2_id},
         "player_stats": {"p1": s1, "p2": s2},
         "h2h": {
-            "p1_wins": int(p1_h2h_wins),
-            "p2_wins": int(p2_h2h_wins),
-            "total": int(h2h_total),
+            "p1_wins": h2h["p1_wins"],
+            "p2_wins": h2h["p2_wins"],
+            "total": h2h_total,
         },
         "fav_underdog": {"p1": p1_fav_dog, "p2": p2_fav_dog},
         "custom_model": {
