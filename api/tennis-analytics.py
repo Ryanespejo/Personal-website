@@ -101,6 +101,8 @@ def _load_model() -> dict | None:
     return model
 
 
+# ── RapidAPI enrichment (isolated conflict block) ─────────────────────────
+
 def _load_rapid_cache() -> dict:
     cached = _data_cache.get("rapid_daily")
     if cached:
@@ -271,6 +273,7 @@ def _custom_analytics(p1_name: str, p2_name: str, p1_rank: float, p2_rank: float
 
     custom_z = (rank_gap * 0.012) + (points_gap * 0.00008) + (form_gap * 2.5) + (h2h_gap * 1.6)
     custom_prob = _sigmoid(custom_z)
+    # Keep RapidAPI response shape centralized for easier merges.
     return {
         "rapidapi_enabled": bool(RAPIDAPI_KEY),
         "rapidapi_status": _data_cache.get(RAPID_STATUS_KEY, {"ok": bool(RAPIDAPI_KEY), "message": ""}),
