@@ -879,12 +879,16 @@
           };
           const p1FD = renderPlayerFavDog(name1, favDog.p1, 0);
           const p2FD = renderPlayerFavDog(name2, favDog.p2, 1);
+          const fdSource = (favDog.p1 || favDog.p2 || {}).source || '';
+          const fdSourceLabel = fdSource === 'rapidapi' ? 'Source: RapidAPI match history'
+            : fdSource === 'sackmann' ? 'Source: Sackmann historical data' : '';
           favDogEl.innerHTML = p1FD + p2FD +
             `<div class="fav-dog-legend">
               <span><span class="fav-dog-legend-dot" style="background:var(--accent)"></span>Win</span>
               <span><span class="fav-dog-legend-dot" style="background:rgba(255,106,123,0.45)"></span>Loss</span>
               <span><span class="fav-dog-legend-dot" style="background:var(--gold)"></span>Upset win</span>
-            </div>`;
+            </div>` +
+            (fdSourceLabel ? `<div style="font-size:0.63rem;color:var(--muted);margin-top:0.3rem;opacity:0.7">${fdSourceLabel}</div>` : '');
         }
 
         // Update H2H section with historical data from backend

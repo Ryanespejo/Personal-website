@@ -37,6 +37,7 @@ RAPIDAPI_KEY = os.getenv("RAPIDAPI_KEY", "4d185181bemsh8dd69666ef3eb9dp1c9db0jsn
 RAPIDAPI_SEARCH_PATH = os.getenv("RAPIDAPI_TENNIS_SEARCH_PATH", "/api/tennis/search/{query}")
 RAPIDAPI_PLAYER_STATS_PATH = os.getenv("RAPIDAPI_TENNIS_PLAYER_STATS_PATH", "/api/tennis/player/{player_id}/stats")
 RAPIDAPI_H2H_PATH = os.getenv("RAPIDAPI_TENNIS_H2H_PATH", "/api/tennis/h2h/{player1_id}/{player2_id}")
+RAPIDAPI_LAST_MATCHES_PATH = os.getenv("RAPIDAPI_TENNIS_LAST_MATCHES_PATH", "/api/tennis/player/{player_id}/last-matches/{page}")
 RAPIDAPI_TIMEOUT = 10
 RAPID_CACHE_PATH = pathlib.Path("/tmp/rapid_tennis_cache.json")
 
@@ -200,6 +201,95 @@ def _rapid_h2h(player1_id: str, player2_id: str) -> dict:
     return _rapid_daily(f"h2h::{player1_id}::{player2_id}", _loader)
 
 
+def _rapid_player_matches(player_id: str, page: int = 0) -> dict:
+    if not player_id:
+        return {}
+
+    def _loader():
+        path = RAPIDAPI_LAST_MATCHES_PATH.format(player_id=player_id, page=page)
+        return _rapid_fetch_json(path)
+
+    return _rapid_daily(f"last_matches::{player_id}::{page}", _loader)
+
+
+def _rapid_fav_underdog(player_id: str) -> dict | None:
+    """Compute favorite/underdog record from RapidAPI match history."""
+    if not player_id or not RAPIDAPI_KEY:
+        return None
+
+    raw = _rapid_player_matches(player_id)
+    events = raw.get("events") or raw.get("matches") or raw.get("results") or []
+    if not events:
+        return None
+
+    fav_w = fav_l = dog_w = dog_l = 0
+    for ev in events:
+        # Each event has homeTeam/awayTeam or homePlayer/awayPlayer with ranking
+        home = ev.get("homeTeam") or ev.get("homePlayer") or {}
+        away = ev.get("awayTeam") or ev.get("awayPlayer") or {}
+        home_id = str(home.get("id") or "")
+        away_id = str(away.get("id") or "")
+        # Determine which side is our player
+        if home_id == player_id:
+            my_team, opp_team = home, away
+        elif away_id == player_id:
+            my_team, opp_team = away, home
+        else:
+            continue
+
+        # Get rankings — try multiple field patterns
+        my_rank = _sf(my_team.get("ranking") or my_team.get("rank") or
+                      my_team.get("seedRanking") or my_team.get("worldRanking"), 0)
+        opp_rank = _sf(opp_team.get("ranking") or opp_team.get("rank") or
+                       opp_team.get("seedRanking") or opp_team.get("worldRanking"), 0)
+
+        # Determine winner from score or status
+        winner_code = ev.get("winnerCode")  # 1=home, 2=away
+        home_score = _sf((ev.get("homeScore") or {}).get("current"), -1)
+        away_score = _sf((ev.get("awayScore") or {}).get("current"), -1)
+        if winner_code == 1:
+            won = (home_id == player_id)
+        elif winner_code == 2:
+            won = (away_id == player_id)
+        elif home_score >= 0 and away_score >= 0:
+            if home_id == player_id:
+                won = home_score > away_score
+            else:
+                won = away_score > home_score
+        else:
+            continue  # can't determine winner
+
+        if my_rank > 0 and opp_rank > 0:
+            is_fav = my_rank < opp_rank  # lower rank number = favorite
+        else:
+            # No ranking data — skip for favorite/underdog breakdown
+            continue
+
+        if is_fav:
+            if won:
+                fav_w += 1
+            else:
+                fav_l += 1
+        else:
+            if won:
+                dog_w += 1
+            else:
+                dog_l += 1
+
+    if (fav_w + fav_l + dog_w + dog_l) == 0:
+        return None
+
+    return {
+        "fav_wins": fav_w, "fav_losses": fav_l,
+        "fav_total": fav_w + fav_l,
+        "fav_win_pct": round(fav_w / (fav_w + fav_l), 4) if (fav_w + fav_l) else 0,
+        "dog_wins": dog_w, "dog_losses": dog_l,
+        "dog_total": dog_w + dog_l,
+        "dog_win_pct": round(dog_w / (dog_w + dog_l), 4) if (dog_w + dog_l) else 0,
+        "source": "rapidapi",
+    }
+
+
 def _extract_rapid_metrics(stats: dict, fallback_rank: float, fallback_points: float) -> dict:
     rank = _sf(stats.get("rank") or stats.get("ranking") or stats.get("worldRank"), fallback_rank or 500)
     points = _sf(stats.get("points") or stats.get("rankingPoints"), fallback_points)
@@ -236,6 +326,11 @@ def _custom_analytics(p1_name: str, p2_name: str, p1_rank: float, p2_rank: float
 
     custom_z = (rank_gap * 0.012) + (points_gap * 0.00008) + (form_gap * 2.5) + (h2h_gap * 1.6)
     custom_prob = _sigmoid(custom_z)
+
+    # Compute favorite/underdog from RapidAPI match history
+    p1_fav_dog = _rapid_fav_underdog(p1_id)
+    p2_fav_dog = _rapid_fav_underdog(p2_id)
+
     return {
         "rapidapi_enabled": bool(RAPIDAPI_KEY),
         "cache_ttl_hours": int(RAPID_CACHE_TTL / 3600),
@@ -246,6 +341,7 @@ def _custom_analytics(p1_name: str, p2_name: str, p1_rank: float, p2_rank: float
             "p2_wins": int(p2_h2h_wins),
             "total": int(h2h_total),
         },
+        "fav_underdog": {"p1": p1_fav_dog, "p2": p2_fav_dog},
         "custom_model": {
             "type": "rapidapi_elo_logit_blend",
             "p1_win_prob": round(custom_prob, 4),
@@ -518,12 +614,28 @@ class handler(BaseHTTPRequestHandler):
                         "p1": round(blended, 4),
                         "p2": round(1 - blended, 4),
                     }
+                # Merge fav/underdog: prefer RapidAPI (richer match history),
+                # fall back to Sackmann when RapidAPI has no data.
+                sack_fd = extra.get("fav_underdog") or {}
+                rapid_fd = custom.get("fav_underdog") or {}
+                merged_fd = {}
+                for pkey in ("p1", "p2"):
+                    r = rapid_fd.get(pkey)
+                    s = sack_fd.get(pkey)
+                    if r and (r.get("fav_total", 0) + r.get("dog_total", 0)) > 0:
+                        merged_fd[pkey] = r
+                    elif s and (s.get("fav_total", 0) + s.get("dog_total", 0)) > 0:
+                        s["source"] = "sackmann"
+                        merged_fd[pkey] = s
+                    else:
+                        merged_fd[pkey] = None
+
                 pred.update({
                     "player1": p1, "player2": p2,
                     "tour": tour, "surface": surface,
                     "h2h": extra["h2h"],
                     "player_stats": extra["stats"],
-                    "fav_underdog": extra.get("fav_underdog", {}),
+                    "fav_underdog": merged_fd,
                     "custom_analytics": custom,
                     "model_info": {
                         "accuracy": model.get("metadata", {}).get("accuracy"),
