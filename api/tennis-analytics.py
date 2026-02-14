@@ -33,7 +33,7 @@ SACKMANN_WTA = "https://raw.githubusercontent.com/JeffSackmann/tennis_wta/master
 
 RAPIDAPI_BASE_URL = os.getenv("RAPIDAPI_TENNIS_BASE_URL", "https://tennisapi1.p.rapidapi.com")
 RAPIDAPI_HOST = os.getenv("RAPIDAPI_TENNIS_HOST", "tennisapi1.p.rapidapi.com")
-RAPIDAPI_KEY = os.getenv("RAPIDAPI_KEY", "")
+RAPIDAPI_KEY = os.getenv("RAPIDAPI_KEY", "4d185181bemsh8dd69666ef3eb9dp1c9db0jsn1ac0970d3911")
 RAPIDAPI_SEARCH_PATH = os.getenv("RAPIDAPI_TENNIS_SEARCH_PATH", "/api/tennis/search/{query}")
 RAPIDAPI_PLAYER_STATS_PATH = os.getenv("RAPIDAPI_TENNIS_PLAYER_STATS_PATH", "/api/tennis/player/{player_id}/stats")
 RAPIDAPI_H2H_PATH = os.getenv("RAPIDAPI_TENNIS_H2H_PATH", "/api/tennis/h2h/{player1_id}/{player2_id}")
