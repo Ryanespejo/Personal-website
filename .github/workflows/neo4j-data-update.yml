@@ -1,0 +1,60 @@
+name: Neo4j Sports Database Update
+
+on:
+  schedule:
+    - cron: "30 6 * * *"   # daily at 06:30 UTC (after tennis model retrain at 06:00)
+  workflow_dispatch:        # manual trigger from GitHub UI
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+
+    env:
+      NEO4J_URI:      ${{ secrets.NEO4J_URI }}
+      NEO4J_USERNAME: ${{ secrets.NEO4J_USERNAME }}
+      NEO4J_PASSWORD: ${{ secrets.NEO4J_PASSWORD }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # ── Tennis ────────────────────────────────────────────────────────────
+      # Ingest the current and previous year so recent matches are always fresh.
+      - name: Ingest ATP tennis data (current + previous year)
+        run: |
+          YEAR=$(date +%Y)
+          PREV=$((YEAR - 1))
+          python -m api.db.ingestion.tennis \
+            --tours atp \
+            --start-year $PREV \
+            --end-year $YEAR
+
+      - name: Ingest WTA tennis data (current + previous year)
+        run: |
+          YEAR=$(date +%Y)
+          PREV=$((YEAR - 1))
+          python -m api.db.ingestion.tennis \
+            --tours wta \
+            --start-year $PREV \
+            --end-year $YEAR
+
+      # ── NBA ───────────────────────────────────────────────────────────────
+      - name: Ingest NBA scoreboard (today)
+        run: python -m api.db.ingestion.nba
+
+      # ── College Basketball ────────────────────────────────────────────────
+      - name: Ingest CBB scoreboard (today)
+        run: python -m api.db.ingestion.cbb
+
+      # ── College Baseball ──────────────────────────────────────────────────
+      - name: Ingest College Baseball scoreboard (today)
+        run: python -m api.db.ingestion.college_baseball
