@@ -765,7 +765,10 @@ def _neo_custom_analytics(
                 },
             },
             "h2h": h2h,
-            "fav_underdog": {"p1": None, "p2": None},
+            "fav_underdog": {
+                "p1": _rapid_fav_underdog(_rapid_find_player_id(p1_name)),
+                "p2": _rapid_fav_underdog(_rapid_find_player_id(p2_name)),
+            },
             "custom_model": {
                 "type": "neo4j_recency_logit_blend",
                 "p1_win_prob": round(cp, 4),
