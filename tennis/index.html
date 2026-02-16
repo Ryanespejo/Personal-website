@@ -811,8 +811,14 @@
 
         const modelInfo = d.model_info || {};
         const accText = modelInfo.accuracy ? `${Math.round(modelInfo.accuracy * 100)}% accuracy` : '';
-        const dateText = modelInfo.trained_at ? new Date(modelInfo.trained_at).toLocaleDateString() : '';
+        const trainedDate = modelInfo.trained_at ? new Date(modelInfo.trained_at) : null;
+        const hasValidDate = trainedDate && !Number.isNaN(trainedDate.getTime());
+        const modelAgeDays = hasValidDate
+          ? Math.floor((Date.now() - trainedDate.getTime()) / (1000 * 60 * 60 * 24))
+          : null;
+        const dateText = hasValidDate ? trainedDate.toLocaleDateString() : '';
         const infoLine = [accText, dateText].filter(Boolean).join(' · ');
+        const staleModel = Number.isFinite(modelAgeDays) && modelAgeDays > 120;
 
         const custom = d.custom_analytics || {};
         const customModel = custom.custom_model || {};
@@ -837,8 +843,8 @@
             <span class="ml-confidence-fill" style="width:${confPct}px"></span>
           </div>
           ${factorsHtml ? `<div class="ins-title" style="margin-top:0.3rem">Key Factors</div><ul class="ml-factors">${factorsHtml}</ul>` : ''}
-          ${infoLine ? `<div class="ml-model-info">Model: ${infoLine}</div>` : ''}
-          <div class="ml-model-info">RapidAPI daily cache: ${rapidEnabled ? 'enabled (24h)' : 'disabled (set RAPIDAPI_KEY)'}</div>
+          ${infoLine ? `<div class="ml-model-info">Model: ${infoLine}${staleModel ? ` <span style="color:var(--gold)">(stale: ${modelAgeDays} days old)</span>` : ''}</div>` : ''}
+          <div class="ml-model-info">Live enrichment: ${rapidEnabled ? 'enabled (24h cache)' : 'disabled (set RAPIDAPI_KEY)'}</div>
           ${(customP1 != null && customP2 != null) ? `<div class="ml-model-info">Custom model: ${name1} ${customP1}% · ${customP2}% ${name2}</div>` : ''}
           ${(ensP1 != null && ensP2 != null) ? `<div class="ml-model-info">Ensemble blend: ${name1} ${ensP1}% · ${ensP2}% ${name2}</div>` : ''}`;
 
