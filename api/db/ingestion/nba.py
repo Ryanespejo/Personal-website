@@ -172,7 +172,7 @@ def ingest_today(verbose: bool = True) -> dict[str, int]:
                 "home_score":   home["score"],
                 "away_score":   away["score"],
                 "season_year":  season.get("year"),
-                "season_type":  season.get("type", {}).get("name", ""),
+                "season_type":  season.get("type"),
                 "venue":        venue_obj.get("fullName", ""),
             })
 
