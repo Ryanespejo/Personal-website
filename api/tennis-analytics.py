@@ -20,6 +20,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from api.db.neo4j_client import run_query
 
 # ── In-memory caches ─────────────────────────────────────────────────────────
 _model_cache: dict = {}
@@ -33,12 +34,30 @@ SACKMANN_WTA = "https://raw.githubusercontent.com/JeffSackmann/tennis_wta/master
 
 RAPIDAPI_BASE_URL = os.getenv("RAPIDAPI_TENNIS_BASE_URL", "https://tennisapi1.p.rapidapi.com")
 RAPIDAPI_HOST = os.getenv("RAPIDAPI_TENNIS_HOST", "tennisapi1.p.rapidapi.com")
-RAPIDAPI_KEY = os.getenv("RAPIDAPI_KEY", "4d185181bemsh8dd69666ef3eb9dp1c9db0jsn1ac0970d3911")
+RAPIDAPI_KEY = os.getenv("RAPIDAPI_KEY", "")
 RAPIDAPI_SEARCH_PATH = os.getenv("RAPIDAPI_TENNIS_SEARCH_PATH", "/api/tennis/search/{query}")
 RAPIDAPI_PLAYER_PATH = os.getenv("RAPIDAPI_TENNIS_PLAYER_PATH", "/api/tennis/player/{player_id}")
 RAPIDAPI_PREV_EVENTS_PATH = os.getenv("RAPIDAPI_TENNIS_PREV_EVENTS_PATH", "/api/tennis/player/{player_id}/events/previous/{page}")
 RAPIDAPI_TIMEOUT = 10
 RAPID_CACHE_PATH = pathlib.Path("/tmp/rapid_tennis_cache.json")
+RAPID_MATCH_PAGES = 2
+
+ENSEMBLE_BASE_WEIGHTS = {
+    "default": 0.22,
+    "atp": 0.28,
+    "wta": 0.26,
+}
+
+SURFACE_WEIGHT_BONUS = {
+    "hard": 0.04,
+    "clay": 0.02,
+    "grass": 0.02,
+    "carpet": 0.00,
+}
+
+
+NEO_CACHE_TTL = 3600
+
 
 # Feature list must match analytics/config.py exactly
 FEATURES = [
@@ -203,6 +222,27 @@ def _rapid_player_matches(player_id: str, page: int = 0) -> dict:
     return _rapid_daily(f"prev_events::{player_id}::{page}", _loader)
 
 
+def _rapid_recent_events(player_id: str, max_pages: int = RAPID_MATCH_PAGES) -> list[dict]:
+    events: list[dict] = []
+    seen_ids: set[str] = set()
+
+    for page in range(max_pages):
+        raw = _rapid_player_matches(player_id, page=page)
+        page_events = raw.get("events") or []
+        if not page_events:
+            break
+        for ev in page_events:
+            eid = str(ev.get("id") or "")
+            if eid and eid in seen_ids:
+                continue
+            if eid:
+                seen_ids.add(eid)
+            events.append(ev)
+
+    events.sort(key=lambda e: e.get("startTimestamp") or 0, reverse=True)
+    return events
+
+
 def _rank_to_elo(rank: float) -> float:
     """Convert ATP/WTA ranking to approximate Elo rating.
 
@@ -309,39 +349,91 @@ def _rapid_fav_underdog(player_id: str) -> dict | None:
 
 
 def _extract_rapid_metrics(detail: dict, match_events: list, fallback_rank: float, fallback_points: float) -> dict:
-    """Extract player metrics from /player/{id} detail and match history."""
-    # Player detail returns {"team": {"ranking": N, ...}, "pregameForm": ...}
+    """Extract player metrics from /player/{id} detail and recent match history."""
     team = detail.get("team") or detail
     rank = _sf(team.get("ranking") or team.get("rank"), fallback_rank or 500)
     points = _sf(team.get("points") or team.get("rankingPoints"), fallback_points)
-    # Compute W/L from match history since the stats endpoint doesn't exist
+
     pid = str(team.get("id") or "")
     wins = losses = 0
-    for ev in match_events:
+    recent_results: list[int] = []
+    surface_record = {
+        "hard": {"w": 0, "t": 0},
+        "clay": {"w": 0, "t": 0},
+        "grass": {"w": 0, "t": 0},
+        "carpet": {"w": 0, "t": 0},
+    }
+
+    for ev in sorted(match_events, key=lambda e: e.get("startTimestamp") or 0, reverse=True):
         home = ev.get("homeTeam") or {}
         away = ev.get("awayTeam") or {}
         wc = ev.get("winnerCode")
         if not wc:
             continue
+
+        in_match = False
         if str(home.get("id") or "") == pid:
-            if wc == 1:
-                wins += 1
-            else:
-                losses += 1
+            won = wc == 1
+            in_match = True
         elif str(away.get("id") or "") == pid:
-            if wc == 2:
-                wins += 1
-            else:
-                losses += 1
+            won = wc == 2
+            in_match = True
+        if not in_match:
+            continue
+
+        if won:
+            wins += 1
+        else:
+            losses += 1
+
+        if len(recent_results) < 10:
+            recent_results.append(1 if won else 0)
+
+        gs = (ev.get("groundType") or {}).get("name")
+        surface = str(gs or "").lower()
+        if surface in surface_record:
+            surface_record[surface]["t"] += 1
+            if won:
+                surface_record[surface]["w"] += 1
+
     total = wins + losses
     win_rate = wins / total if total else 0.5
+    last_5 = recent_results[:5]
+    last_10 = recent_results[:10]
+
+    surface_win_rates = {
+        key: (vals["w"] / vals["t"] if vals["t"] else 0.5)
+        for key, vals in surface_record.items()
+    }
+
     return {
         "rank": rank,
         "points": points,
         "wins": int(wins),
         "losses": int(losses),
         "win_rate": win_rate,
+        "recent": {
+            "last_5_win_rate": (sum(last_5) / len(last_5)) if last_5 else 0.5,
+            "last_10_win_rate": (sum(last_10) / len(last_10)) if last_10 else 0.5,
+            "sample_size": len(recent_results),
+            "streak": _compute_streak(recent_results),
+        },
+        "surface_win_rates": surface_win_rates,
+        "surface_sample": {k: v["t"] for k, v in surface_record.items()},
     }
+
+
+def _compute_streak(results: list[int]) -> int:
+    """Positive for win streak, negative for losing streak."""
+    if not results:
+        return 0
+    first = results[0]
+    streak = 0
+    for r in results:
+        if r != first:
+            break
+        streak += 1
+    return streak if first == 1 else -streak
 
 
 def _rapid_h2h_from_matches(p1_id: str, p2_id: str, p1_events: list, p2_events: list) -> dict:
@@ -378,13 +470,11 @@ def _custom_analytics(p1_name: str, p2_name: str, p1_rank: float, p2_rank: float
     p1_id = _rapid_find_player_id(p1_name)
     p2_id = _rapid_find_player_id(p2_name)
 
-    # Fetch player details and match histories
+    # Fetch player details and recent match histories (multiple pages for recency quality)
     p1_detail = _rapid_player_detail(p1_id)
     p2_detail = _rapid_player_detail(p2_id)
-    p1_matches_raw = _rapid_player_matches(p1_id)
-    p2_matches_raw = _rapid_player_matches(p2_id)
-    p1_events = (p1_matches_raw.get("events") or [])
-    p2_events = (p2_matches_raw.get("events") or [])
+    p1_events = _rapid_recent_events(p1_id)
+    p2_events = _rapid_recent_events(p2_id)
 
     s1 = _extract_rapid_metrics(p1_detail, p1_events, p1_rank, p1_points)
     s2 = _extract_rapid_metrics(p2_detail, p2_events, p2_rank, p2_points)
@@ -394,13 +484,24 @@ def _custom_analytics(p1_name: str, p2_name: str, p1_rank: float, p2_rank: float
     h2h_total = h2h["total"]
     h2h_ratio = h2h["p1_wins"] / h2h_total if h2h_total else 0.5
 
-    # Simple Elo-inspired custom score combining rank, points, W/L and H2H.
+    # Recency-aware custom score combining rank, points, overall form, short-form, streak and H2H.
     rank_gap = s2["rank"] - s1["rank"]
     points_gap = s1["points"] - s2["points"]
     form_gap = s1["win_rate"] - s2["win_rate"]
+    recency5_gap = s1["recent"]["last_5_win_rate"] - s2["recent"]["last_5_win_rate"]
+    recency10_gap = s1["recent"]["last_10_win_rate"] - s2["recent"]["last_10_win_rate"]
+    streak_gap = s1["recent"]["streak"] - s2["recent"]["streak"]
     h2h_gap = h2h_ratio - 0.5
 
-    custom_z = (rank_gap * 0.012) + (points_gap * 0.00008) + (form_gap * 2.5) + (h2h_gap * 1.6)
+    custom_z = (
+        (rank_gap * 0.011)
+        + (points_gap * 0.00008)
+        + (form_gap * 1.8)
+        + (recency5_gap * 1.7)
+        + (recency10_gap * 1.1)
+        + (streak_gap * 0.12)
+        + (h2h_gap * 1.3)
+    )
     custom_prob = _sigmoid(custom_z)
 
     # Compute favorite/underdog from RapidAPI match history
@@ -410,6 +511,11 @@ def _custom_analytics(p1_name: str, p2_name: str, p1_rank: float, p2_rank: float
     return {
         "rapidapi_enabled": bool(RAPIDAPI_KEY),
         "cache_ttl_hours": int(RAPID_CACHE_TTL / 3600),
+        "data_freshness": {
+            "p1_latest_match_ts": p1_events[0].get("startTimestamp") if p1_events else None,
+            "p2_latest_match_ts": p2_events[0].get("startTimestamp") if p2_events else None,
+            "events_scanned": {"p1": len(p1_events), "p2": len(p2_events)},
+        },
         "player_ids": {"p1": p1_id, "p2": p2_id},
         "player_stats": {"p1": s1, "p2": s2},
         "h2h": {
@@ -419,11 +525,264 @@ def _custom_analytics(p1_name: str, p2_name: str, p1_rank: float, p2_rank: float
         },
         "fav_underdog": {"p1": p1_fav_dog, "p2": p2_fav_dog},
         "custom_model": {
-            "type": "rapidapi_elo_logit_blend",
+            "type": "rapidapi_recency_logit_blend",
             "p1_win_prob": round(custom_prob, 4),
             "p2_win_prob": round(1 - custom_prob, 4),
+            "components": {
+                "rank_gap": round(rank_gap, 3),
+                "points_gap": round(points_gap, 3),
+                "form_gap": round(form_gap, 4),
+                "recency5_gap": round(recency5_gap, 4),
+                "recency10_gap": round(recency10_gap, 4),
+                "streak_gap": int(streak_gap),
+                "h2h_gap": round(h2h_gap, 4),
+            },
         },
     }
+
+
+def _neo_enabled() -> bool:
+    return bool(os.getenv("NEO4J_URI") and os.getenv("NEO4J_PASSWORD"))
+
+
+def _neo_cached(key: str, loader):
+    now = time.time()
+    rec = _data_cache.get(key)
+    if rec and now - rec.get("ts", 0) < NEO_CACHE_TTL:
+        return rec.get("data")
+    data = loader()
+    _data_cache[key] = {"ts": now, "data": data}
+    return data
+
+
+def _neo_find_player(name: str, tour: str) -> dict | None:
+    q = (name or "").strip()
+    if not q or not _neo_enabled():
+        return None
+
+    def _exact_loader():
+        return run_query(
+            """
+            MATCH (p:Player {sport:'tennis'})
+            WHERE toLower(p.name) = toLower($name)
+              AND ($tour = '' OR p.tour = $tour)
+            RETURN p.id AS id, p.name AS name,
+                   coalesce(p.rank, 500) AS rank,
+                   coalesce(p.rank_points, 0) AS points,
+                   coalesce(p.tour, '') AS tour
+            LIMIT 1
+            """,
+            {"name": q, "tour": tour or ""},
+        )
+
+    rows = _neo_cached(f"neo_find_exact::{tour}::{q.lower()}", _exact_loader)
+    if rows:
+        return rows[0]
+
+    last = q.split()[-1].lower()
+    def _fuzzy_loader():
+        return run_query(
+            """
+            MATCH (p:Player {sport:'tennis'})
+            WHERE toLower(p.name) CONTAINS $needle
+              AND ($tour = '' OR p.tour = $tour)
+            RETURN p.id AS id, p.name AS name,
+                   coalesce(p.rank, 500) AS rank,
+                   coalesce(p.rank_points, 0) AS points,
+                   coalesce(p.tour, '') AS tour
+            ORDER BY coalesce(p.rank, 9999) ASC
+            LIMIT 3
+            """,
+            {"needle": last, "tour": tour or ""},
+        )
+
+    rows = _neo_cached(f"neo_find_fuzzy::{tour}::{last}", _fuzzy_loader)
+    return rows[0] if rows else None
+
+
+def _neo_player_recent_stats(player_id: str, surface: str) -> dict:
+    if not player_id or not _neo_enabled():
+        return {}
+
+    def _loader():
+        return run_query(
+            """
+            MATCH (:Player {id:$pid})-[r:PLAYED_IN]->(m:Match {sport:'tennis'})
+            RETURN coalesce(r.result,'') AS result,
+                   coalesce(m.surface,'') AS surface,
+                   coalesce(m.date,'') AS date,
+                   coalesce(r.aces,0) AS aces,
+                   coalesce(r.serve_points,0) AS serve_points,
+                   coalesce(r.first_serve_won,0) AS first_serve_won,
+                   coalesce(r.first_serves_in,0) AS first_serves_in,
+                   coalesce(r.bp_saved,0) AS bp_saved,
+                   coalesce(r.bp_faced,0) AS bp_faced
+            ORDER BY m.date DESC
+            LIMIT 80
+            """,
+            {"pid": player_id},
+        )
+
+    rows = _neo_cached(f"neo_player_rows::{player_id}", _loader)
+    wins = losses = 0
+    sw = st = 0
+    recent_results = []
+    ace = svpt = fsw = fsi = bps = bpf = 0
+
+    sl = (surface or "").lower()
+    for row in rows:
+        is_win = (row.get("result") == "win")
+        if is_win:
+            wins += 1
+        else:
+            losses += 1
+        if len(recent_results) < 10:
+            recent_results.append(1 if is_win else 0)
+        if sl and row.get("surface") == sl:
+            st += 1
+            if is_win:
+                sw += 1
+
+        ace += int(row.get("aces") or 0)
+        svpt += int(row.get("serve_points") or 0)
+        fsw += int(row.get("first_serve_won") or 0)
+        fsi += int(row.get("first_serves_in") or 0)
+        bps += int(row.get("bp_saved") or 0)
+        bpf += int(row.get("bp_faced") or 0)
+
+    total = wins + losses
+    return {
+        "wins": wins,
+        "losses": losses,
+        "win_rate": (wins / total) if total else 0.5,
+        "recent": {
+            "last_5_win_rate": (sum(recent_results[:5]) / len(recent_results[:5])) if recent_results[:5] else 0.5,
+            "last_10_win_rate": (sum(recent_results) / len(recent_results)) if recent_results else 0.5,
+            "sample_size": len(recent_results),
+            "streak": _compute_streak(recent_results),
+        },
+        "surface_win_rate": (sw / st) if st else 0.5,
+        "ace_rate": (ace / svpt) if svpt else 0.0,
+        "first_serve_win_pct": (fsw / fsi) if fsi else 0.0,
+        "bp_save_rate": (bps / bpf) if bpf else 0.0,
+    }
+
+
+def _neo_h2h(p1_id: str, p2_id: str) -> dict:
+    if not p1_id or not p2_id or not _neo_enabled():
+        return {"p1_wins": 0, "p2_wins": 0, "total": 0}
+
+    def _loader():
+        return run_query(
+            """
+            MATCH (:Player {id:$p1})-[r1:PLAYED_IN]->(m:Match)<-[r2:PLAYED_IN]-(:Player {id:$p2})
+            RETURN coalesce(r1.result,'') AS p1_result
+            ORDER BY m.date DESC
+            LIMIT 30
+            """,
+            {"p1": p1_id, "p2": p2_id},
+        )
+
+    rows = _neo_cached(f"neo_h2h::{p1_id}::{p2_id}", _loader)
+    p1_w = sum(1 for r in rows if r.get("p1_result") == "win")
+    p2_w = sum(1 for r in rows if r.get("p1_result") == "loss")
+    return {"p1_wins": p1_w, "p2_wins": p2_w, "total": p1_w + p2_w}
+
+
+def _neo_custom_analytics(
+    p1_name: str,
+    p2_name: str,
+    tour: str,
+    surface: str,
+    p1_rank: float,
+    p2_rank: float,
+    p1_points: float,
+    p2_points: float,
+) -> dict | None:
+    if not _neo_enabled():
+        return None
+
+    try:
+        p1 = _neo_find_player(p1_name, tour)
+        p2 = _neo_find_player(p2_name, tour)
+        if not p1 or not p2:
+            return None
+
+        s1 = _neo_player_recent_stats(str(p1.get("id")), surface)
+        s2 = _neo_player_recent_stats(str(p2.get("id")), surface)
+        if not s1 or not s2:
+            return None
+
+        rank1 = _sf(p1.get("rank"), p1_rank or 500)
+        rank2 = _sf(p2.get("rank"), p2_rank or 500)
+        pts1 = _sf(p1.get("points"), p1_points)
+        pts2 = _sf(p2.get("points"), p2_points)
+
+        h2h = _neo_h2h(str(p1.get("id")), str(p2.get("id")))
+        h2h_ratio = (h2h["p1_wins"] / h2h["total"]) if h2h["total"] else 0.5
+
+        rank_gap = rank2 - rank1
+        points_gap = pts1 - pts2
+        form_gap = s1["win_rate"] - s2["win_rate"]
+        recency5_gap = s1["recent"]["last_5_win_rate"] - s2["recent"]["last_5_win_rate"]
+        recency10_gap = s1["recent"]["last_10_win_rate"] - s2["recent"]["last_10_win_rate"]
+        streak_gap = s1["recent"]["streak"] - s2["recent"]["streak"]
+        h2h_gap = h2h_ratio - 0.5
+
+        z = (
+            (rank_gap * 0.011)
+            + (points_gap * 0.00008)
+            + (form_gap * 1.8)
+            + (recency5_gap * 1.7)
+            + (recency10_gap * 1.1)
+            + (streak_gap * 0.12)
+            + (h2h_gap * 1.3)
+        )
+        cp = _sigmoid(z)
+
+        return {
+            "source": "neo4j",
+            "neo4j_enabled": True,
+            "player_ids": {"p1": str(p1.get("id")), "p2": str(p2.get("id"))},
+            "player_stats": {
+                "p1": {
+                    "rank": rank1,
+                    "points": pts1,
+                    "wins": s1["wins"],
+                    "losses": s1["losses"],
+                    "win_rate": s1["win_rate"],
+                    "recent": s1["recent"],
+                    "surface_win_rate": s1["surface_win_rate"],
+                },
+                "p2": {
+                    "rank": rank2,
+                    "points": pts2,
+                    "wins": s2["wins"],
+                    "losses": s2["losses"],
+                    "win_rate": s2["win_rate"],
+                    "recent": s2["recent"],
+                    "surface_win_rate": s2["surface_win_rate"],
+                },
+            },
+            "h2h": h2h,
+            "fav_underdog": {"p1": None, "p2": None},
+            "custom_model": {
+                "type": "neo4j_recency_logit_blend",
+                "p1_win_prob": round(cp, 4),
+                "p2_win_prob": round(1 - cp, 4),
+                "components": {
+                    "rank_gap": round(rank_gap, 3),
+                    "points_gap": round(points_gap, 3),
+                    "form_gap": round(form_gap, 4),
+                    "recency5_gap": round(recency5_gap, 4),
+                    "recency10_gap": round(recency10_gap, 4),
+                    "streak_gap": int(streak_gap),
+                    "h2h_gap": round(h2h_gap, 4),
+                },
+            },
+        }
+    except Exception:
+        return None
 
 
 # ── Pure-Python sigmoid + predict ────────────────────────────────────────────
@@ -711,13 +1070,23 @@ class handler(BaseHTTPRequestHandler):
                 feats, extra = _compute_features(p1, p2, tour, surface,
                                                   p1_rank, p2_rank, p1_pts, p2_pts, best_of)
                 pred = _predict(model, feats)
-                custom = _custom_analytics(p1, p2, p1_rank, p2_rank, p1_pts, p2_pts)
+                custom = _neo_custom_analytics(
+                    p1, p2, tour, surface, p1_rank, p2_rank, p1_pts, p2_pts
+                )
+                if not custom:
+                    custom = _custom_analytics(p1, p2, p1_rank, p2_rank, p1_pts, p2_pts)
                 custom_prob = ((custom.get("custom_model") or {}).get("p1_win_prob"))
                 if isinstance(custom_prob, (int, float)):
-                    blended = (pred["p1_win_prob"] * 0.65) + (custom_prob * 0.35)
+                    base_weight = ENSEMBLE_BASE_WEIGHTS.get(tour, ENSEMBLE_BASE_WEIGHTS["default"])
+                    weight = min(0.45, max(0.10, base_weight + SURFACE_WEIGHT_BONUS.get(surface, 0.0)))
+                    blended = (pred["p1_win_prob"] * (1 - weight)) + (custom_prob * weight)
                     pred["ensemble_win_prob"] = {
                         "p1": round(blended, 4),
                         "p2": round(1 - blended, 4),
+                        "weights": {
+                            "base_model": round(1 - weight, 3),
+                            "live_recency": round(weight, 3),
+                        },
                     }
                 # Merge fav/underdog: prefer RapidAPI (richer match history),
                 # fall back to Sackmann when RapidAPI has no data.
