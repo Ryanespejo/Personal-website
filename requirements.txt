@@ -1,0 +1,3 @@
+# Runtime dependencies for Vercel Python serverless functions.
+# The neo4j driver is needed by /api/sports-db.py and the db/ package.
+neo4j>=5.14,<6.0
