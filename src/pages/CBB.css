@@ -1,0 +1,31 @@
+/* College Basketball page CSS variables */
+.cbb-page {
+  --page-bg: radial-gradient(circle at top right, #0c1a3d 0%, transparent 40%),
+    radial-gradient(circle at bottom left, #1a1030 0%, transparent 35%),
+    #07090f;
+  --bg: #07090f;
+  --panel: #111625;
+  --panel-soft: #171d2f;
+  --line: #252d45;
+  --text: #f4f7ff;
+  --muted: #9ba7c6;
+  --accent: #3b82f6;
+  --accent-soft: rgba(59, 130, 246, 0.14);
+  --accent-border: rgba(59, 130, 246, 0.4);
+  --accent-bg-selected: rgba(59, 130, 246, 0.06);
+  --accent-bg-conf: rgba(59, 130, 246, 0.06);
+  --accent-live-bg: rgba(59, 130, 246, 0.07);
+  --accent-live-border: rgba(59, 130, 246, 0.35);
+  --danger: #ff6a7b;
+  --gold: #ffcf6b;
+  --gold-soft: rgba(255, 207, 107, 0.14);
+  --win: #62f2a6;
+  --win-soft: rgba(98, 242, 166, 0.14);
+  --ranked: #facc15;
+}
+
+.tname {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}

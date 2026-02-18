@@ -1,0 +1,91 @@
+/* College Baseball page CSS variables */
+.baseball-page {
+  --page-bg: radial-gradient(circle at top right, #3d0c0c 0%, transparent 40%),
+    radial-gradient(circle at bottom left, #1a1030 0%, transparent 35%),
+    #07090f;
+  --bg: #07090f;
+  --panel: #111625;
+  --panel-soft: #171d2f;
+  --line: #252d45;
+  --text: #f4f7ff;
+  --muted: #9ba7c6;
+  --accent: #ef4444;
+  --accent-soft: rgba(239, 68, 68, 0.14);
+  --accent-border: rgba(239, 68, 68, 0.4);
+  --accent-bg-selected: rgba(239, 68, 68, 0.06);
+  --accent-bg-conf: rgba(239, 68, 68, 0.06);
+  --accent-live-bg: rgba(239, 68, 68, 0.07);
+  --accent-live-border: rgba(239, 68, 68, 0.35);
+  --danger: #ff6a7b;
+  --gold: #ffcf6b;
+  --gold-soft: rgba(255, 207, 107, 0.14);
+  --win: #62f2a6;
+  --win-soft: rgba(98, 242, 166, 0.14);
+  --ranked: #facc15;
+}
+
+/* RHE display values */
+.rhe-val {
+  min-width: 2.2rem;
+  text-align: center;
+  border-radius: 5px;
+  border: 1px solid var(--line);
+  padding: 0.12rem 0.15rem;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.88rem;
+}
+
+.rhe-val.runs {
+  font-weight: 700;
+}
+
+.rhe-val.runs.live {
+  color: var(--accent);
+  border-color: var(--accent-live-border);
+  background: var(--accent-live-bg);
+}
+
+.rhe-val.runs.winner {
+  color: var(--win);
+}
+
+.rhe-val.runs.final {
+  color: var(--text);
+}
+
+.rhe-val.hits, .rhe-val.errors {
+  color: var(--muted);
+  border-color: transparent;
+  background: transparent;
+}
+
+.rhe-label {
+  min-width: 2.2rem;
+  text-align: center;
+  font-size: 0.65rem;
+  color: var(--accent);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Baseball box score - rhe specific */
+.box-score td.total-r {
+  font-weight: 700;
+  font-size: 0.85rem;
+}
+
+.box-score td.total-h,
+.box-score td.total-e {
+  color: var(--muted);
+}
+
+.box-score tr.winner td.total-r {
+  color: var(--win);
+}
+
+.tname {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
