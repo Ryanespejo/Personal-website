@@ -2,17 +2,19 @@
 """
 RapidAPI Tennis Connection Test
 ================================
-Tests the three API endpoints used by tennis-analytics.py:
-  1. Search  — /api/tennis/search/{query}
-  2. Player  — /api/tennis/player/{player_id}
-  3. Events  — /api/tennis/player/{player_id}/events/previous/{page}
+Tests the full pipeline from RapidAPI to Neo4j:
+  1. Env check  — RAPIDAPI_KEY is set
+  2. Search     — /api/tennis/search/{query}
+  3. Player     — /api/tennis/player/{player_id}
+  4. Events     — /api/tennis/player/{player_id}/events/previous/{page}
+  5. Neo4j save — ingest events into the graph database (requires NEO4J_* vars)
 
 Usage:
   RAPIDAPI_KEY=<your-key> python3 test_rapidapi_connection.py
 
-Or export the key first:
-  export RAPIDAPI_KEY=<your-key>
-  python3 test_rapidapi_connection.py
+With Neo4j ingestion:
+  RAPIDAPI_KEY=<key> NEO4J_URI=<uri> NEO4J_PASSWORD=<pw> \\
+      python3 test_rapidapi_connection.py
 """
 
 import json
@@ -175,19 +177,20 @@ def test_player_detail(player_id: str) -> bool:
     return True
 
 
-def test_prev_events(player_id: str) -> bool:
-    print(f"\n[4/4] Previous events endpoint — id={player_id}, page=0")
+def test_prev_events(player_id: str) -> list[dict] | None:
+    """Return the raw events list on success, None on API failure."""
+    print(f"\n[4/5] Previous events endpoint — id={player_id}, page=0")
     path = PREV_EVENTS_PATH.format(player_id=player_id, page=0)
     data, err = _get(path)
     if data is None:
         print(f"  [{FAIL}] {err}")
-        return False
+        return None
 
     events = data.get("events") or []
     if not events:
         print(f"  [{WARN}] Response OK but no events returned.")
         print(f"  Response preview:\n{_pp(data)}")
-        return True  # endpoint responded; empty events is valid
+        return []  # endpoint responded; empty events is valid
 
     # Show summary of most recent 3 events
     print(f"  [{PASS}] {len(events)} event(s) on page 0")
@@ -205,7 +208,44 @@ def test_prev_events(player_id: str) -> bool:
             f"sets: {h_score.get('current','?')}-{a_score.get('current','?')}"
         )
     print(f"  Response preview:\n{_pp(data)}")
-    return True
+    return events
+
+
+def test_neo4j_ingest(events: list[dict]) -> bool:
+    """Ingest events into Neo4j. Skipped if NEO4J_URI / NEO4J_PASSWORD are unset."""
+    print(f"\n[5/5] Neo4j ingestion — {len(events)} event(s)")
+
+    neo4j_uri = os.getenv("NEO4J_URI", "")
+    neo4j_pw  = os.getenv("NEO4J_PASSWORD", "")
+    if not neo4j_uri or not neo4j_pw:
+        print(f"  [{SKIP}] NEO4J_URI / NEO4J_PASSWORD not set — skipping DB write.")
+        print("         Set both env vars to enable:  NEO4J_URI=...  NEO4J_PASSWORD=...")
+        return True  # not a failure; just optional
+
+    # Import the ingestion module (requires repo root on sys.path)
+    _repo_root = os.path.dirname(os.path.abspath(__file__))
+    if _repo_root not in sys.path:
+        sys.path.insert(0, _repo_root)
+
+    try:
+        from api.db.ingestion.rapidapi_tennis import ingest_events  # noqa: PLC0415
+    except ImportError as exc:
+        print(f"  [{FAIL}] Could not import ingestion module: {exc}")
+        return False
+
+    try:
+        counts = ingest_events(events, verbose=True)
+        print(
+            f"  [{PASS}] Ingested → "
+            f"{counts['players']} players | "
+            f"{counts['tournaments']} tournaments | "
+            f"{counts['matches']} matches | "
+            f"{counts['relationships']} PLAYED_IN edges"
+        )
+        return True
+    except Exception as exc:
+        print(f"  [{FAIL}] Ingestion error: {exc}")
+        return False
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
@@ -231,11 +271,18 @@ def main():
     if player_id:
         # 3. player detail
         results["player_detail"] = test_player_detail(player_id)
-        # 4. previous events
-        results["prev_events"] = test_prev_events(player_id)
+        # 4. previous events (returns raw list, or None on failure)
+        events = test_prev_events(player_id)
+        results["prev_events"] = events is not None
+        # 5. neo4j ingestion
+        if events is not None:
+            results["neo4j_ingest"] = test_neo4j_ingest(events)
+        else:
+            results["neo4j_ingest"] = None
     else:
         results["player_detail"] = None
         results["prev_events"]   = None
+        results["neo4j_ingest"]  = None
 
     _summary(results)
     all_passed = all(v for v in results.values() if v is not None)
@@ -251,6 +298,7 @@ def _summary(results: dict):
         "search":        "Search endpoint     ",
         "player_detail": "Player detail       ",
         "prev_events":   "Previous events     ",
+        "neo4j_ingest":  "Neo4j ingestion     ",
     }
     for key, label in labels.items():
         v = results.get(key)
