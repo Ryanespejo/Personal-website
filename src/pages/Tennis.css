@@ -1,0 +1,623 @@
+/* Tennis page CSS variables */
+.tennis-page {
+  --page-bg: radial-gradient(circle at top right, #1c2b5f 0%, transparent 40%),
+    radial-gradient(circle at bottom left, #193838 0%, transparent 35%),
+    #07090f;
+  --bg: #07090f;
+  --panel: #111625;
+  --panel-soft: #171d2f;
+  --line: #252d45;
+  --text: #f4f7ff;
+  --muted: #9ba7c6;
+  --accent: #62f2a6;
+  --accent-soft: rgba(98, 242, 166, 0.14);
+  --accent-border: rgba(98, 242, 166, 0.4);
+  --accent-bg-selected: rgba(98, 242, 166, 0.06);
+  --accent-live-bg: rgba(98, 242, 166, 0.07);
+  --accent-live-border: rgba(98, 242, 166, 0.35);
+  --danger: #ff6a7b;
+  --gold: #ffcf6b;
+  --gold-soft: rgba(255, 207, 107, 0.14);
+  --atp: #7dd3fc;
+  --wta: #f9a8d4;
+  --win: #62f2a6;
+  --win-soft: rgba(98, 242, 166, 0.14);
+}
+
+/* ── Tournament sections ── */
+.tournament-section {
+  border-bottom: 1px solid var(--line);
+}
+
+.tournament-section:last-child {
+  border-bottom: 0;
+}
+
+.tournament-header {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+  padding: 0.55rem 1rem;
+  background: rgba(10, 14, 26, 0.7);
+  border-bottom: 1px solid var(--line);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  backdrop-filter: blur(10px);
+}
+
+.tour-label {
+  font-size: 0.63rem;
+  padding: 0.1rem 0.42rem;
+  border-radius: 999px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  flex-shrink: 0;
+}
+
+.tour-label.atp {
+  color: var(--atp);
+  background: rgba(125, 211, 252, 0.1);
+  border: 1px solid rgba(125, 211, 252, 0.3);
+}
+
+.tour-label.wta {
+  color: var(--wta);
+  background: rgba(249, 168, 212, 0.1);
+  border: 1px solid rgba(249, 168, 212, 0.3);
+}
+
+.tourn-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tourn-live-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.65rem;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.tourn-live-pill .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: pulse 2s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+@keyframes pulse {
+  0%, 100% { box-shadow: 0 0 0 3px rgba(98, 242, 166, 0.2); }
+  50% { box-shadow: 0 0 0 6px rgba(98, 242, 166, 0.04); }
+}
+
+/* ── Match cards (tennis-specific) ── */
+.row {
+  display: grid;
+  grid-template-columns: 1fr repeat(var(--sets, 2), 1.75rem) 2.3rem;
+  gap: 0.38rem;
+  align-items: center;
+  font-size: 0.91rem;
+}
+
+.pname {
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pname.winner {
+  color: var(--accent);
+}
+
+.set-score {
+  min-width: 1.75rem;
+  text-align: center;
+  border-radius: 5px;
+  border: 1px solid var(--line);
+  padding: 0.12rem 0.15rem;
+  color: #dce4ff;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.86rem;
+}
+
+.set-score.won {
+  border-color: rgba(98, 242, 166, 0.45);
+  background: rgba(98, 242, 166, 0.08);
+  color: var(--accent);
+}
+
+.game-score {
+  min-width: 2.3rem;
+  text-align: center;
+  border-radius: 5px;
+  border: 1px solid rgba(98, 242, 166, 0.35);
+  background: rgba(98, 242, 166, 0.07);
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.86rem;
+  padding: 0.12rem 0.15rem;
+}
+
+/* ── Insights panel ── */
+.ins-match-header {
+  padding: 1rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.ins-players {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: 600;
+  font-size: 0.97rem;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
+}
+
+.ins-p {
+  flex: 1;
+}
+
+.ins-p.right {
+  text-align: right;
+}
+
+.ins-vs {
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 400;
+  flex-shrink: 0;
+}
+
+.ins-sub {
+  font-size: 0.73rem;
+  color: var(--muted);
+}
+
+.ins-status-badge {
+  margin-top: 0.4rem;
+}
+
+.ins-section {
+  border-top: 1px solid var(--line);
+  padding: 0.85rem 1rem;
+}
+
+.ins-title {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--muted);
+  margin-bottom: 0.65rem;
+  font-weight: 600;
+}
+
+/* H2H */
+.h2h-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.78rem;
+  font-weight: 600;
+  margin-bottom: 0.35rem;
+}
+
+.h2h-bar {
+  display: flex;
+  height: 7px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--line);
+  gap: 2px;
+  margin-bottom: 0.35rem;
+}
+
+.h2h-seg {
+  border-radius: 999px;
+  transition: flex 0.5s ease;
+}
+
+.h2h-seg.p1 {
+  background: var(--accent);
+}
+
+.h2h-seg.p2 {
+  background: var(--wta);
+}
+
+.h2h-note {
+  font-size: 0.71rem;
+  color: var(--muted);
+}
+
+/* Recent form */
+.form-line {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin-bottom: 0.5rem;
+}
+
+.form-line:last-child {
+  margin-bottom: 0;
+}
+
+.form-pname {
+  font-size: 0.78rem;
+  font-weight: 500;
+  min-width: 5.5rem;
+  flex-shrink: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.form-badges {
+  display: flex;
+  gap: 0.28rem;
+  flex-wrap: wrap;
+}
+
+.fb {
+  width: 1.45rem;
+  height: 1.45rem;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.fb.W {
+  background: rgba(98, 242, 166, 0.13);
+  color: var(--accent);
+  border: 1px solid rgba(98, 242, 166, 0.32);
+}
+
+.fb.L {
+  background: rgba(255, 106, 123, 0.1);
+  color: var(--danger);
+  border: 1px solid rgba(255, 106, 123, 0.28);
+}
+
+.form-empty {
+  font-size: 0.76rem;
+  color: var(--muted);
+}
+
+/* Rankings */
+.rank-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 0.2rem 0;
+}
+
+.rank-pname {
+  font-size: 0.84rem;
+  font-weight: 500;
+}
+
+.rank-num {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--gold);
+}
+
+.rank-msg {
+  font-size: 0.76rem;
+  color: var(--muted);
+  font-style: italic;
+}
+
+/* Prediction sources */
+.pred-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 0.6rem;
+}
+
+.pred-link {
+  font-size: 0.72rem;
+  padding: 0.28rem 0.65rem;
+  border-radius: 999px;
+  text-decoration: none;
+  border: 1px solid;
+  transition: opacity 0.15s, transform 0.1s;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  white-space: nowrap;
+}
+
+.pred-link:hover {
+  opacity: 0.75;
+  transform: translateY(-1px);
+}
+
+.pred-article {
+  padding: 0.45rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.pred-article:last-child {
+  border-bottom: none;
+}
+
+.pred-article-title {
+  font-size: 0.79rem;
+  color: var(--text);
+  text-decoration: none;
+  line-height: 1.45;
+  display: block;
+}
+
+.pred-article-title:hover {
+  color: var(--accent);
+}
+
+.pred-snippet {
+  font-size: 0.74rem;
+  color: var(--muted);
+  line-height: 1.55;
+  margin-top: 0.3rem;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.pred-source-label {
+  font-size: 0.64rem;
+  color: var(--muted);
+  margin-top: 0.18rem;
+  letter-spacing: 0.02em;
+}
+
+.pred-msg {
+  font-size: 0.75rem;
+  color: var(--muted);
+  font-style: italic;
+}
+
+/* ── ML Prediction ── */
+.ml-section {
+  border-top: 1px solid var(--line);
+  padding: 0.85rem 1rem;
+}
+
+.ml-title {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--muted);
+  margin-bottom: 0.65rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.ml-badge {
+  font-size: 0.58rem;
+  padding: 0.12rem 0.4rem;
+  border-radius: 999px;
+  background: rgba(168, 85, 247, 0.12);
+  color: #c084fc;
+  border: 1px solid rgba(168, 85, 247, 0.35);
+  letter-spacing: 0.04em;
+}
+
+.ml-prob-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 0.35rem;
+  font-size: 0.84rem;
+  font-weight: 600;
+}
+
+.ml-prob-pct {
+  font-variant-numeric: tabular-nums;
+}
+
+.ml-prob-pct.fav {
+  color: #c084fc;
+}
+
+.ml-bar {
+  display: flex;
+  height: 7px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--line);
+  gap: 2px;
+  margin-bottom: 0.45rem;
+}
+
+.ml-seg {
+  border-radius: 999px;
+  transition: flex 0.5s ease;
+}
+
+.ml-seg.p1 {
+  background: #c084fc;
+}
+
+.ml-seg.p2 {
+  background: var(--wta);
+}
+
+.ml-confidence {
+  font-size: 0.71rem;
+  color: var(--muted);
+  margin-bottom: 0.55rem;
+}
+
+.ml-confidence-fill {
+  display: inline-block;
+  height: 4px;
+  border-radius: 999px;
+  background: #c084fc;
+  vertical-align: middle;
+  margin-left: 0.3rem;
+}
+
+.ml-factors {
+  list-style: none;
+  padding: 0;
+}
+
+.ml-factors li {
+  font-size: 0.74rem;
+  color: var(--muted);
+  padding: 0.18rem 0;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.ml-factors .arrow {
+  font-size: 0.68rem;
+  width: 1rem;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.ml-factors .arrow.p1 {
+  color: #c084fc;
+}
+
+.ml-factors .arrow.p2 {
+  color: var(--wta);
+}
+
+.ml-model-info {
+  font-size: 0.65rem;
+  color: var(--muted);
+  margin-top: 0.5rem;
+  opacity: 0.7;
+  border-top: 1px solid var(--line);
+  padding-top: 0.4rem;
+}
+
+.ml-msg {
+  font-size: 0.75rem;
+  color: var(--muted);
+  font-style: italic;
+}
+
+/* Favorite vs Underdog */
+.fav-dog-row {
+  margin-bottom: 0.7rem;
+}
+
+.fav-dog-row:last-child {
+  margin-bottom: 0;
+}
+
+.fav-dog-name {
+  font-size: 0.78rem;
+  font-weight: 500;
+  margin-bottom: 0.3rem;
+}
+
+.fav-dog-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.fav-dog-bar-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.fav-dog-label {
+  font-size: 0.68rem;
+  color: var(--muted);
+  min-width: 4.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
+}
+
+.fav-dog-track {
+  flex: 1;
+  height: 14px;
+  border-radius: 4px;
+  background: var(--line);
+  overflow: hidden;
+  display: flex;
+  position: relative;
+}
+
+.fav-dog-fill-w {
+  height: 100%;
+  border-radius: 4px 0 0 4px;
+  transition: width 0.6s ease;
+}
+
+.fav-dog-fill-l {
+  height: 100%;
+  transition: width 0.6s ease;
+}
+
+.fav-dog-fill-w.fav { background: var(--accent); }
+.fav-dog-fill-l.fav { background: rgba(255, 106, 123, 0.45); }
+.fav-dog-fill-w.dog { background: var(--gold); }
+.fav-dog-fill-l.dog { background: rgba(255, 106, 123, 0.45); }
+
+.fav-dog-stat {
+  font-size: 0.68rem;
+  color: var(--muted);
+  min-width: 5.5rem;
+  text-align: right;
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.fav-dog-legend {
+  display: flex;
+  gap: 0.8rem;
+  margin-top: 0.55rem;
+  font-size: 0.65rem;
+  color: var(--muted);
+}
+
+.fav-dog-legend-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  margin-right: 0.25rem;
+  vertical-align: middle;
+}
+
+.fav-dog-msg {
+  font-size: 0.75rem;
+  color: var(--muted);
+  font-style: italic;
+}
+
+/* Source pills for tennis */
+.source-pill.python {
+  color: var(--atp);
+}

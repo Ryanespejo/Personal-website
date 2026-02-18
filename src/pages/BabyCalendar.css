@@ -1,0 +1,356 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+.bc-page {
+  --bg: #0a0a0a;
+  --surface: #141414;
+  --surface-hover: #1a1a1a;
+  --border: #222;
+  --border-glow: #3a3a3a;
+  --text: #fafafa;
+  --text-muted: #888;
+  --accent: #f4a261;
+  --accent-soft: rgba(244, 162, 97, 0.1);
+  --pink: #e07a9a;
+  --pink-soft: rgba(224, 122, 154, 0.1);
+  --purple: #b07ae0;
+  --green: #7ae0a2;
+
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* ── Back link ── */
+.bc-back-link {
+  position: fixed;
+  top: 1.5rem;
+  left: 1.5rem;
+  z-index: 100;
+  color: var(--text-muted);
+  text-decoration: none;
+  font-size: 0.85rem;
+  letter-spacing: 0.05em;
+  transition: color 0.3s;
+}
+.bc-back-link:hover { color: var(--accent); }
+
+/* ── Hero ── */
+.bc-hero {
+  text-align: center;
+  padding: 6rem 2rem 3rem;
+}
+.bc-hero h1 {
+  font-size: clamp(2rem, 5vw, 3.5rem);
+  font-weight: 300;
+  letter-spacing: 0.04em;
+  margin-bottom: 0.75rem;
+}
+.bc-hero h1 span { color: var(--accent); }
+.bc-hero p {
+  color: var(--text-muted);
+  font-size: 1.05rem;
+  max-width: 500px;
+  margin: 0 auto;
+  line-height: 1.6;
+}
+
+/* ── Trimester tabs ── */
+.bc-trimester-nav {
+  display: flex;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 1rem 2rem 2rem;
+  flex-wrap: wrap;
+}
+.bc-tri-btn {
+  padding: 0.6rem 1.5rem;
+  border: 1px solid var(--border);
+  border-radius: 100px;
+  background: transparent;
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.3s;
+  letter-spacing: 0.03em;
+}
+.bc-tri-btn:hover { border-color: var(--border-glow); color: var(--text); }
+.bc-tri-btn.active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.bc-tri-btn[data-tri="all"].active {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: var(--text-muted);
+  color: var(--text);
+}
+
+/* ── Grid ── */
+.bc-weeks-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 1rem;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 0 2rem 4rem;
+}
+
+/* ── Week card ── */
+.bc-week-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 1.5rem 1rem;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+  opacity: 0;
+  transform: translateY(20px);
+  animation: bcCardIn 0.5s ease forwards;
+}
+.bc-week-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 16px;
+  opacity: 0;
+  transition: opacity 0.35s;
+  background: radial-gradient(circle at 50% 0%, var(--accent-soft) 0%, transparent 70%);
+}
+.bc-week-card:hover {
+  border-color: var(--border-glow);
+  transform: translateY(-4px) scale(1.02);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+}
+.bc-week-card:hover::before { opacity: 1; }
+
+@keyframes bcCardIn {
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.bc-fruit-emoji {
+  font-size: 2.8rem;
+  display: block;
+  margin-bottom: 0.75rem;
+  transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  z-index: 1;
+}
+.bc-week-card:hover .bc-fruit-emoji {
+  transform: scale(1.25) rotate(-5deg);
+}
+.bc-week-num {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-muted);
+  margin-bottom: 0.25rem;
+  position: relative;
+  z-index: 1;
+}
+.bc-fruit-name {
+  font-size: 0.95rem;
+  font-weight: 500;
+  position: relative;
+  z-index: 1;
+}
+.bc-size-text {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  margin-top: 0.35rem;
+  position: relative;
+  z-index: 1;
+}
+
+/* ── Modal overlay ── */
+.bc-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.35s;
+}
+.bc-modal-overlay.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.bc-modal {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  max-width: 560px;
+  width: 100%;
+  max-height: 85vh;
+  overflow-y: auto;
+  padding: 2.5rem;
+  position: relative;
+  transform: translateY(30px) scale(0.95);
+  transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.bc-modal-overlay.open .bc-modal {
+  transform: translateY(0) scale(1);
+}
+
+.bc-modal::-webkit-scrollbar { width: 6px; }
+.bc-modal::-webkit-scrollbar-track { background: transparent; }
+.bc-modal::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+.bc-modal-close {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 1.1rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+.bc-modal-close:hover { border-color: var(--text-muted); color: var(--text); }
+
+.bc-modal-emoji {
+  font-size: 5rem;
+  text-align: center;
+  display: block;
+  margin-bottom: 1rem;
+  animation: bcFruitBounce 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+@keyframes bcFruitBounce {
+  0%   { transform: scale(0.3) rotate(-10deg); opacity: 0; }
+  60%  { transform: scale(1.15) rotate(3deg); }
+  100% { transform: scale(1) rotate(0deg); opacity: 1; }
+}
+
+.bc-modal-week {
+  text-align: center;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--accent);
+  margin-bottom: 0.25rem;
+}
+.bc-modal-fruit-name {
+  text-align: center;
+  font-size: 1.6rem;
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+}
+.bc-modal-size {
+  text-align: center;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin-bottom: 1.5rem;
+}
+
+/* ── Trimester badge ── */
+.bc-tri-badge {
+  display: inline-block;
+  padding: 0.25rem 0.7rem;
+  border-radius: 100px;
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin-bottom: 1rem;
+}
+.bc-tri-badge.t1 { background: rgba(122, 224, 162, 0.1); color: var(--green); }
+.bc-tri-badge.t2 { background: rgba(244, 162, 97, 0.1);  color: var(--accent); }
+.bc-tri-badge.t3 { background: rgba(176, 122, 224, 0.1); color: var(--purple); }
+
+/* ── Progress bar ── */
+.bc-progress-bar {
+  width: 100%;
+  height: 4px;
+  background: var(--border);
+  border-radius: 4px;
+  margin-bottom: 1.5rem;
+  overflow: hidden;
+}
+.bc-progress-fill {
+  height: 100%;
+  border-radius: 4px;
+  background: linear-gradient(90deg, var(--accent), var(--pink));
+  transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ── Modal sections ── */
+.bc-modal-section {
+  margin-bottom: 1.25rem;
+}
+.bc-modal-section h3 {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+  margin-bottom: 0.5rem;
+}
+.bc-modal-section p {
+  font-size: 0.92rem;
+  line-height: 1.65;
+  color: #ccc;
+}
+
+/* ── Tags ── */
+.bc-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.5rem;
+}
+.bc-tag {
+  font-size: 0.72rem;
+  padding: 0.3rem 0.7rem;
+  border-radius: 100px;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  letter-spacing: 0.02em;
+}
+.bc-tag.highlight { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.bc-tag.pink      { border-color: var(--pink);   color: var(--pink);   background: var(--pink-soft); }
+
+/* ── Modal nav ── */
+.bc-modal-nav {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 2rem;
+}
+.bc-modal-nav button {
+  padding: 0.5rem 1.2rem;
+  border: 1px solid var(--border);
+  border-radius: 100px;
+  background: transparent;
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  letter-spacing: 0.03em;
+}
+.bc-modal-nav button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.bc-modal-nav button:disabled { opacity: 0.25; cursor: default; }
+
+/* ── Responsive ── */
+@media (max-width: 600px) {
+  .bc-weeks-grid { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 0.75rem; }
+  .bc-modal { padding: 1.75rem; border-radius: 20px; }
+  .bc-hero  { padding: 5rem 1.5rem 2rem; }
+}

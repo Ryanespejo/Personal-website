@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Ryan Espejo</title>
+  <script>
+    // GitHub Pages SPA redirect: store path in sessionStorage, redirect to root
+    var path = window.location.pathname;
+    sessionStorage.setItem('redirect', path);
+    window.location.replace('/');
+  </script>
+</head>
+<body></body>
+</html>
