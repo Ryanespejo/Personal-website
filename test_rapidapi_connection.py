@@ -26,7 +26,12 @@ import urllib.parse
 import urllib.request
 
 # ── Config (mirrors tennis-analytics.py) ─────────────────────────────────────
-RAPIDAPI_KEY      = os.getenv("RAPIDAPI_KEY", "")
+RAPIDAPI_KEY      = (
+    os.getenv("RAPIDAPI_KEY")
+    or os.getenv("RAPID_API_KEY")
+    or os.getenv("RAPIDAPI_TENNIS_KEY")
+    or ""
+)
 BASE_URL          = os.getenv("RAPIDAPI_TENNIS_BASE_URL", "https://tennisapi1.p.rapidapi.com")
 HOST              = os.getenv("RAPIDAPI_TENNIS_HOST",     "tennisapi1.p.rapidapi.com")
 SEARCH_PATH       = os.getenv("RAPIDAPI_TENNIS_SEARCH_PATH",    "/api/tennis/search/{query}")
@@ -100,11 +105,11 @@ def _pp(data: dict | list, max_keys: int = 6, indent: int = 4) -> str:
 def test_env() -> bool:
     print("\n[1/4] Environment check")
     if not RAPIDAPI_KEY:
-        print(f"  [{FAIL}] RAPIDAPI_KEY is not set.")
-        print("         Set it before running:  export RAPIDAPI_KEY=<your-key>")
+        print(f"  [{FAIL}] RapidAPI key is not set.")
+        print("         Set one of: RAPIDAPI_KEY, RAPID_API_KEY, RAPIDAPI_TENNIS_KEY")
         return False
     masked = RAPIDAPI_KEY[:6] + "..." + RAPIDAPI_KEY[-4:]
-    print(f"  [{PASS}] RAPIDAPI_KEY found  ({masked})")
+    print(f"  [{PASS}] RapidAPI key found  ({masked})")
     print(f"  [{PASS}] Base URL: {BASE_URL}")
     print(f"  [{PASS}] Host:     {HOST}")
     return True
