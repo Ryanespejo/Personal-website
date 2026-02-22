@@ -34,13 +34,22 @@ SACKMANN_WTA = "https://raw.githubusercontent.com/JeffSackmann/tennis_wta/master
 
 RAPIDAPI_BASE_URL = os.getenv("RAPIDAPI_TENNIS_BASE_URL", "https://tennisapi1.p.rapidapi.com")
 RAPIDAPI_HOST = os.getenv("RAPIDAPI_TENNIS_HOST", "tennisapi1.p.rapidapi.com")
-RAPIDAPI_KEY = os.getenv("RAPIDAPI_KEY", "")
 RAPIDAPI_SEARCH_PATH = os.getenv("RAPIDAPI_TENNIS_SEARCH_PATH", "/api/tennis/search/{query}")
 RAPIDAPI_PLAYER_PATH = os.getenv("RAPIDAPI_TENNIS_PLAYER_PATH", "/api/tennis/player/{player_id}")
 RAPIDAPI_PREV_EVENTS_PATH = os.getenv("RAPIDAPI_TENNIS_PREV_EVENTS_PATH", "/api/tennis/player/{player_id}/events/previous/{page}")
 RAPIDAPI_TIMEOUT = 10
 RAPID_CACHE_PATH = pathlib.Path("/tmp/rapid_tennis_cache.json")
 RAPID_MATCH_PAGES = 2
+
+
+def _rapidapi_key() -> str:
+    """Resolve RapidAPI key from supported env var names."""
+    return (
+        os.getenv("RAPIDAPI_KEY")
+        or os.getenv("RAPID_API_KEY")
+        or os.getenv("RAPIDAPI_TENNIS_KEY")
+        or ""
+    ).strip()
 
 ENSEMBLE_BASE_WEIGHTS = {
     "default": 0.22,
@@ -145,7 +154,8 @@ def _save_rapid_cache(payload: dict):
 
 
 def _rapid_fetch_json(path: str, params: dict | None = None) -> dict:
-    if not RAPIDAPI_KEY:
+    rapidapi_key = _rapidapi_key()
+    if not rapidapi_key:
         return {}
     q = ""
     if params:
@@ -156,7 +166,7 @@ def _rapid_fetch_json(path: str, params: dict | None = None) -> dict:
         "User-Agent": "Mozilla/5.0 TennisAnalytics/1.0",
         "Accept": "application/json",
         "x-rapidapi-host": RAPIDAPI_HOST,
-        "x-rapidapi-key": RAPIDAPI_KEY,
+        "x-rapidapi-key": rapidapi_key,
     })
     with urllib.request.urlopen(req, timeout=RAPIDAPI_TIMEOUT) as resp:
         return json.loads(resp.read().decode("utf-8", errors="replace"))
@@ -179,7 +189,7 @@ def _rapid_daily(key: str, loader) -> dict:
 
 def _rapid_find_player_id(name: str) -> str:
     q = (name or "").strip()
-    if not q or not RAPIDAPI_KEY:
+    if not q or not _rapidapi_key():
         return ""
 
     def _loader():
@@ -260,7 +270,7 @@ ELO_K = 32  # standard K-factor for tennis
 
 def _rapid_fav_underdog(player_id: str) -> dict | None:
     """Compute favorite/underdog record from RapidAPI match history using Elo."""
-    if not player_id or not RAPIDAPI_KEY:
+    if not player_id or not _rapidapi_key():
         return None
 
     raw = _rapid_player_matches(player_id)
@@ -509,7 +519,7 @@ def _custom_analytics(p1_name: str, p2_name: str, p1_rank: float, p2_rank: float
     p2_fav_dog = _rapid_fav_underdog(p2_id)
 
     return {
-        "rapidapi_enabled": bool(RAPIDAPI_KEY),
+        "rapidapi_enabled": bool(_rapidapi_key()),
         "cache_ttl_hours": int(RAPID_CACHE_TTL / 3600),
         "data_freshness": {
             "p1_latest_match_ts": p1_events[0].get("startTimestamp") if p1_events else None,
@@ -1042,11 +1052,19 @@ class handler(BaseHTTPRequestHandler):
 
         if action == "status":
             model = _load_model()
+            payload = {
+                "rapidapi_enabled": bool(_rapidapi_key()),
+                "rapidapi_host": RAPIDAPI_HOST,
+            }
             if model:
-                self._json(200, {"status": "ready", "model": model.get("metadata", {})})
+                payload.update({"status": "ready", "model": model.get("metadata", {})})
+                self._json(200, payload)
             else:
-                self._json(200, {"status": "no_model",
-                                 "message": "Model not trained yet. Run: python analytics/train.py"})
+                payload.update({
+                    "status": "no_model",
+                    "message": "Model not trained yet. Run: python analytics/train.py",
+                })
+                self._json(200, payload)
             return
 
         if action == "predict":
