@@ -6,6 +6,7 @@ import CBB from './pages/CBB'
 import CollegeBaseball from './pages/CollegeBaseball'
 import BabyCalendar from './pages/BabyCalendar'
 import BlockGame from './pages/BlockGame'
+import TennisLive from './pages/TennisLive'
 
 export default function App() {
   return (
@@ -18,6 +19,7 @@ export default function App() {
         <Route path="/college-baseball" element={<CollegeBaseball />} />
         <Route path="/babycalendar" element={<BabyCalendar />} />
         <Route path="/block-game" element={<BlockGame />} />
+        <Route path="/tennis-live" element={<TennisLive />} />
       </Routes>
     </BrowserRouter>
   )

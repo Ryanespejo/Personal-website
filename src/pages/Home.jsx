@@ -159,6 +159,7 @@ export default function Home() {
         <h1>hola bean</h1>
         <Link to="/babycalendar" className="nav-link">how big is baby? &rarr;</Link>
         <Link to="/tennis" className="nav-link">tennis live center &rarr;</Link>
+        <Link to="/tennis-live" className="nav-link">tennis live (tnnlive) &rarr;</Link>
         <Link to="/nba" className="nav-link">nba live games &rarr;</Link>
         <Link to="/cbb" className="nav-link">college basketball live &rarr;</Link>
         <Link to="/college-baseball" className="nav-link">college baseball live &rarr;</Link>
