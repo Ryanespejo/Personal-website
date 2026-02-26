@@ -1,0 +1,168 @@
+/* Tennis Live (TnnLive widgets) */
+.tl-page {
+  min-height: 100vh;
+  background: radial-gradient(circle at top right, #1a2a10 0%, transparent 40%),
+    radial-gradient(circle at bottom left, #1a1a2e 0%, transparent 35%),
+    #0a0a0a;
+  color: #f4f7ff;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.tl-app {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 1rem;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+/* ── Top bar ── */
+.tl-topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.2rem 0 0.8rem;
+  border-bottom: 1px solid rgba(202, 243, 76, 0.12);
+}
+
+.tl-brand h1 {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: rgba(202, 243, 76, 1);
+}
+
+.tl-powered {
+  font-size: 0.68rem;
+  color: #9ba7c6;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.tl-home-link {
+  color: #9ba7c6;
+  text-decoration: none;
+  font-size: 0.85rem;
+  transition: color 0.15s;
+}
+
+.tl-home-link:hover {
+  color: rgba(202, 243, 76, 1);
+}
+
+/* ── Tabs ── */
+.tl-tabs {
+  display: flex;
+  gap: 0.25rem;
+  padding: 0.75rem 0 0;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.tl-tab {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #9ba7c6;
+  padding: 0.45rem 1rem;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+  font-family: inherit;
+}
+
+.tl-tab:hover {
+  border-color: rgba(202, 243, 76, 0.3);
+  color: #f4f7ff;
+}
+
+.tl-tab.active {
+  background: rgba(202, 243, 76, 0.1);
+  border-color: rgba(202, 243, 76, 0.4);
+  color: rgba(202, 243, 76, 1);
+}
+
+/* ── Widget container ── */
+.tl-widget-container {
+  flex: 1;
+  position: relative;
+  margin-top: 0.75rem;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: #000;
+  min-height: 600px;
+}
+
+.tl-iframe {
+  width: 100%;
+  height: 100%;
+  min-height: 600px;
+  border: none;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+.tl-iframe.loaded {
+  opacity: 1;
+  position: relative;
+}
+
+/* ── Loading state ── */
+.tl-loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  color: #9ba7c6;
+  font-size: 0.85rem;
+  z-index: 1;
+}
+
+.tl-spinner {
+  width: 28px;
+  height: 28px;
+  border: 2.5px solid rgba(255, 255, 255, 0.08);
+  border-top-color: rgba(202, 243, 76, 0.7);
+  border-radius: 50%;
+  animation: tl-spin 0.8s linear infinite;
+}
+
+@keyframes tl-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── Responsive ── */
+@media (max-width: 640px) {
+  .tl-app {
+    padding: 0 0.5rem;
+  }
+
+  .tl-brand h1 {
+    font-size: 1.2rem;
+  }
+
+  .tl-tab {
+    padding: 0.4rem 0.75rem;
+    font-size: 0.76rem;
+  }
+
+  .tl-widget-container {
+    border-radius: 8px;
+    min-height: 500px;
+  }
+
+  .tl-iframe {
+    min-height: 500px;
+  }
+}
