@@ -120,12 +120,16 @@ class EloTableParser(HTMLParser):
     def _parse_row(self, cells: list):
         """Convert a table row into a player dict.
 
-        Column layout (Tennis Abstract):
-        0: Elo Rank  1: Player  2: Age  3: Elo  4: hElo Rank  5: hElo
-        6: cElo Rank  7: cElo  8: gElo Rank  9: gElo  10: Peak Elo
-        11: Peak Month  12: ATP Rank  13: Log diff
+        Actual column layout (Tennis Abstract, with empty spacer columns):
+        0: Elo Rank  1: Player  2: Age  3: Elo  4: (empty)
+        5: hElo Rank  6: hElo  7: cElo Rank  8: cElo
+        9: gElo Rank  10: gElo  11: (empty)  12: Peak Elo
+        13: Peak Month  14: (empty)  15: ATP Rank  16: Log diff
         """
-        if len(cells) < 12:
+        # Strip empty spacer columns
+        cells = [c.replace('\xa0', ' ') for c in cells]
+        non_empty = [c for c in cells if c.strip()]
+        if len(non_empty) < 12:
             return
 
         def safe_float(v):
@@ -140,20 +144,25 @@ class EloTableParser(HTMLParser):
             except (ValueError, TypeError):
                 return None
 
+        # Use non-empty cells for reliable indexing:
+        # 0: Elo Rank  1: Player  2: Age  3: Elo
+        # 4: hElo Rank  5: hElo  6: cElo Rank  7: cElo
+        # 8: gElo Rank  9: gElo  10: Peak Elo  11: Peak Month
+        # 12: ATP Rank  13: Log diff
         player = {
-            'elo_rank': safe_int(cells[0]),
-            'name': cells[1].strip(),
-            'age': safe_float(cells[2]),
-            'elo': safe_float(cells[3]),
-            'hard_elo_rank': safe_int(cells[4]),
-            'hard_elo': safe_float(cells[5]),
-            'clay_elo_rank': safe_int(cells[6]),
-            'clay_elo': safe_float(cells[7]),
-            'grass_elo_rank': safe_int(cells[8]),
-            'grass_elo': safe_float(cells[9]),
-            'peak_elo': safe_float(cells[10]),
-            'peak_month': cells[11].strip() if len(cells) > 11 else '',
-            'atp_rank': safe_int(cells[12]) if len(cells) > 12 else None,
+            'elo_rank': safe_int(non_empty[0]),
+            'name': non_empty[1].strip(),
+            'age': safe_float(non_empty[2]),
+            'elo': safe_float(non_empty[3]),
+            'hard_elo_rank': safe_int(non_empty[4]),
+            'hard_elo': safe_float(non_empty[5]),
+            'clay_elo_rank': safe_int(non_empty[6]),
+            'clay_elo': safe_float(non_empty[7]),
+            'grass_elo_rank': safe_int(non_empty[8]),
+            'grass_elo': safe_float(non_empty[9]),
+            'peak_elo': safe_float(non_empty[10]),
+            'peak_month': non_empty[11].strip() if len(non_empty) > 11 else '',
+            'atp_rank': safe_int(non_empty[12]) if len(non_empty) > 12 else None,
         }
         if player['name'] and player['elo'] is not None:
             self.players.append(player)

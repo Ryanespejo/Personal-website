@@ -114,6 +114,12 @@ class _EloTableParser(HTMLParser):
             self._in_table = False
 
     def _parse_row(self, cells: list):
+        # Replace non-breaking spaces and strip empty spacer columns
+        cells = [c.replace('\xa0', ' ') for c in cells]
+        non_empty = [c for c in cells if c.strip()]
+        if len(non_empty) < 12:
+            return
+
         def safe_float(v):
             try:
                 return float(v)
@@ -126,24 +132,29 @@ class _EloTableParser(HTMLParser):
             except (ValueError, TypeError):
                 return None
 
-        name = cells[1].strip()
+        # Non-empty column indices:
+        # 0: Elo Rank  1: Player  2: Age  3: Elo
+        # 4: hElo Rank  5: hElo  6: cElo Rank  7: cElo
+        # 8: gElo Rank  9: gElo  10: Peak Elo  11: Peak Month
+        # 12: ATP Rank  13: Log diff
+        name = non_empty[1].strip()
         if not name:
             return
 
         self.players.append({
-            'elo_rank': safe_int(cells[0]),
+            'elo_rank': safe_int(non_empty[0]),
             'name': name,
-            'age': safe_float(cells[2]),
-            'elo': safe_float(cells[3]),
-            'hard_elo_rank': safe_int(cells[4]),
-            'hard_elo': safe_float(cells[5]),
-            'clay_elo_rank': safe_int(cells[6]),
-            'clay_elo': safe_float(cells[7]),
-            'grass_elo_rank': safe_int(cells[8]),
-            'grass_elo': safe_float(cells[9]),
-            'peak_elo': safe_float(cells[10]),
-            'peak_month': cells[11].strip() if len(cells) > 11 else '',
-            'atp_rank': safe_int(cells[12]) if len(cells) > 12 else None,
+            'age': safe_float(non_empty[2]),
+            'elo': safe_float(non_empty[3]),
+            'hard_elo_rank': safe_int(non_empty[4]),
+            'hard_elo': safe_float(non_empty[5]),
+            'clay_elo_rank': safe_int(non_empty[6]),
+            'clay_elo': safe_float(non_empty[7]),
+            'grass_elo_rank': safe_int(non_empty[8]),
+            'grass_elo': safe_float(non_empty[9]),
+            'peak_elo': safe_float(non_empty[10]),
+            'peak_month': non_empty[11].strip() if len(non_empty) > 11 else '',
+            'atp_rank': safe_int(non_empty[12]) if len(non_empty) > 12 else None,
         })
 
 
