@@ -63,7 +63,7 @@ function StatusBadge({ match }) {
   return <span className="badge badge-scheduled">Upcoming</span>
 }
 
-function MatchCard({ match, selected, onSelect }) {
+function MatchCard({ match, selected, onSelect, onPlayerClick }) {
   const maxSets = Math.max(...match.players.map(p => p.sets.length), 2)
   return (
     <div
@@ -80,7 +80,11 @@ function MatchCard({ match, selected, onSelect }) {
           const opp = match.players[1 - pi]
           return (
             <div key={pi} className="row" style={{ '--sets': maxSets }}>
-              <span className={`pname${p.winner ? ' winner' : ''}`}>
+              <span
+                className={`pname pname-clickable${p.winner ? ' winner' : ''}`}
+                onClick={e => { e.stopPropagation(); onPlayerClick?.(p.fullName || p.name, match.tour) }}
+                title="View Elo profile"
+              >
                 {p.serving ? '🎾 ' : ''}{p.name}
               </span>
               {Array.from({ length: maxSets }, (_, i) => {
@@ -101,6 +105,94 @@ function MatchCard({ match, selected, onSelect }) {
   )
 }
 
+function PlayerProfile({ playerName, tour, onClose }) {
+  const [elo, setElo] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    setLoading(true)
+    setElo(null)
+    const enc = encodeURIComponent(playerName)
+    fetch(`/api/tennis-elo?player=${enc}&tour=${tour || 'atp'}`, {
+      signal: AbortSignal.timeout(10000),
+    })
+      .then(r => r.json())
+      .then(data => {
+        const results = data.results || []
+        setElo(results.length > 0 ? results[0] : null)
+        setLoading(false)
+      })
+      .catch(() => setLoading(false))
+  }, [playerName, tour])
+
+  const surfaceBar = (label, eloVal, rank, color) => {
+    const maxElo = 2400
+    const minElo = 1000
+    const pct = eloVal ? Math.max(0, Math.min(100, ((eloVal - minElo) / (maxElo - minElo)) * 100)) : 0
+    return (
+      <div className="elo-surface-row">
+        <span className="elo-surface-label">{label}</span>
+        <div className="elo-surface-track">
+          <div className="elo-surface-fill" style={{ width: `${pct}%`, background: color }} />
+        </div>
+        <span className="elo-surface-value">{eloVal != null ? eloVal.toFixed(1) : '—'}</span>
+        <span className="elo-surface-rank">#{rank ?? '—'}</span>
+      </div>
+    )
+  }
+
+  return (
+    <div className="player-profile-overlay" onClick={onClose}>
+      <div className="player-profile" onClick={e => e.stopPropagation()}>
+        <div className="pp-header">
+          <div className="pp-title-row">
+            <h3 className="pp-name">{playerName}</h3>
+            <button className="pp-close" onClick={onClose}>&times;</button>
+          </div>
+          <span className="pp-tour-badge" data-tour={tour}>{(tour || 'atp').toUpperCase()}</span>
+        </div>
+
+        {loading ? (
+          <div className="pp-loading">Loading Elo ratings...</div>
+        ) : !elo ? (
+          <div className="pp-empty">No Elo data found for this player.</div>
+        ) : (
+          <div className="pp-body">
+            <div className="pp-overview">
+              <div className="pp-stat-card pp-stat-main">
+                <span className="pp-stat-label">Overall Elo</span>
+                <span className="pp-stat-value">{elo.elo?.toFixed(1) ?? '—'}</span>
+                <span className="pp-stat-sub">Rank #{elo.elo_rank ?? '—'}</span>
+              </div>
+              <div className="pp-stat-card">
+                <span className="pp-stat-label">Peak Elo</span>
+                <span className="pp-stat-value pp-peak">{elo.peak_elo?.toFixed(1) ?? '—'}</span>
+                <span className="pp-stat-sub">{elo.peak_month || '—'}</span>
+              </div>
+              <div className="pp-stat-card">
+                <span className="pp-stat-label">ATP Rank</span>
+                <span className="pp-stat-value">#{elo.atp_rank ?? '—'}</span>
+                <span className="pp-stat-sub">Age {elo.age?.toFixed(1) ?? '—'}</span>
+              </div>
+            </div>
+
+            <div className="pp-surfaces">
+              <div className="pp-section-title">Surface Elo Ratings</div>
+              {surfaceBar('Hard', elo.hard_elo, elo.hard_elo_rank, '#7dd3fc')}
+              {surfaceBar('Clay', elo.clay_elo, elo.clay_elo_rank, '#f9a8d4')}
+              {surfaceBar('Grass', elo.grass_elo, elo.grass_elo_rank, '#62f2a6')}
+            </div>
+
+            <div className="pp-footer">
+              Source: Tennis Abstract &middot; Updated weekly
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function InsightsEmpty() {
   return (
     <div className="insights-empty">
@@ -110,7 +202,7 @@ function InsightsEmpty() {
   )
 }
 
-function InsightsPanel({ match, allMatches }) {
+function InsightsPanel({ match, allMatches, onPlayerClick }) {
   const [rankings, setRankings] = useState(null)
   const [mlData, setMlData] = useState(null)
   const [mlLoading, setMlLoading] = useState(true)
@@ -216,9 +308,9 @@ function InsightsPanel({ match, allMatches }) {
     <>
       <div className="ins-match-header">
         <div className="ins-players">
-          <span className="ins-p">{p1.name}</span>
+          <span className="ins-p ins-p-clickable" onClick={() => onPlayerClick?.(p1.fullName || p1.name)}>{p1.name}</span>
           <span className="ins-vs">vs</span>
-          <span className="ins-p right">{p2.name}</span>
+          <span className="ins-p right ins-p-clickable" onClick={() => onPlayerClick?.(p2.fullName || p2.name)}>{p2.name}</span>
         </div>
         <div className="ins-sub">{match.tournamentName}{match.round ? ' · ' + match.round : ''}</div>
         <div className="ins-status-badge">
@@ -522,9 +614,16 @@ export default function Tennis() {
   const [updatedAt, setUpdatedAt] = useState(null)
   const [countdown, setCountdown] = useState(REFRESH_SEC)
   const [showCountdown, setShowCountdown] = useState(false)
+  const [profilePlayer, setProfilePlayer] = useState(null)
+  const [profileTour, setProfileTour] = useState('atp')
 
   const countdownRef = useRef(null)
   const refreshFnRef = useRef(null)
+
+  const openProfile = useCallback((name, tour) => {
+    setProfilePlayer(name)
+    setProfileTour(tour || 'atp')
+  }, [])
 
   async function fetchFromPython() {
     const res = await fetch('/api/tennis', { signal: AbortSignal.timeout(8000) })
@@ -743,6 +842,7 @@ export default function Tennis() {
                           if (selectedId === m.id) setSelectedId(null)
                           else setSelectedId(m.id)
                         }}
+                        onPlayerClick={(name) => openProfile(name, m.tour)}
                       />
                     ))}
                   </div>
@@ -760,13 +860,21 @@ export default function Tennis() {
             </header>
             <div className="insights-scroll">
               {selectedMatch
-                ? <InsightsPanel match={selectedMatch} allMatches={allMatches} />
+                ? <InsightsPanel match={selectedMatch} allMatches={allMatches} onPlayerClick={(name) => openProfile(name, selectedMatch.tour)} />
                 : <InsightsEmpty />
               }
             </div>
           </aside>
         </section>
       </main>
+
+      {profilePlayer && (
+        <PlayerProfile
+          playerName={profilePlayer}
+          tour={profileTour}
+          onClose={() => setProfilePlayer(null)}
+        />
+      )}
     </div>
   )
 }

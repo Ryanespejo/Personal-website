@@ -47,6 +47,14 @@ jobs:
             --start-year $PREV \
             --end-year $YEAR
 
+      # ── Tennis Elo Ratings (from Tennis Abstract) ─────────────────────────
+      # Weekly update — source refreshes once a week; safe to run daily.
+      - name: Ingest ATP Elo ratings
+        run: python -m api.db.ingestion.tennis_elo --tours atp
+
+      - name: Ingest WTA Elo ratings
+        run: python -m api.db.ingestion.tennis_elo --tours wta
+
       # ── NBA ───────────────────────────────────────────────────────────────
       - name: Ingest NBA scoreboard (today)
         run: python -m api.db.ingestion.nba
