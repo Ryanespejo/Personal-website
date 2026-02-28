@@ -621,3 +621,261 @@
 .source-pill.python {
   color: var(--atp);
 }
+
+/* ── Clickable player names ── */
+.pname-clickable {
+  cursor: pointer;
+  transition: color 0.15s;
+}
+
+.pname-clickable:hover {
+  color: var(--accent) !important;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.ins-p-clickable {
+  cursor: pointer;
+  transition: color 0.15s;
+}
+
+.ins-p-clickable:hover {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* ── Player Profile Modal ── */
+.player-profile-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(6px);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  animation: ppFadeIn 0.2s ease;
+}
+
+@keyframes ppFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.player-profile {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  width: 100%;
+  max-width: 440px;
+  max-height: 90vh;
+  overflow-y: auto;
+  animation: ppSlideUp 0.25s ease;
+}
+
+@keyframes ppSlideUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.pp-header {
+  padding: 1.2rem 1.2rem 0.8rem;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.pp-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.pp-name {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0;
+}
+
+.pp-close {
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 1.3rem;
+  cursor: pointer;
+  width: 2rem;
+  height: 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+
+.pp-close:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+  border-color: var(--muted);
+}
+
+.pp-tour-badge {
+  font-size: 0.63rem;
+  padding: 0.12rem 0.45rem;
+  border-radius: 999px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  align-self: flex-start;
+}
+
+.pp-tour-badge[data-tour="atp"] {
+  color: var(--atp);
+  background: rgba(125, 211, 252, 0.1);
+  border: 1px solid rgba(125, 211, 252, 0.3);
+}
+
+.pp-tour-badge[data-tour="wta"] {
+  color: var(--wta);
+  background: rgba(249, 168, 212, 0.1);
+  border: 1px solid rgba(249, 168, 212, 0.3);
+}
+
+.pp-loading,
+.pp-empty {
+  padding: 2rem 1.2rem;
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.pp-body {
+  padding: 1rem 1.2rem 1.2rem;
+}
+
+.pp-overview {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 0.65rem;
+  margin-bottom: 1.2rem;
+}
+
+.pp-stat-card {
+  background: var(--panel-soft);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0.7rem 0.55rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 0.2rem;
+}
+
+.pp-stat-card.pp-stat-main {
+  border-color: var(--accent-border);
+  background: var(--accent-soft);
+}
+
+.pp-stat-label {
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.pp-stat-value {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.pp-stat-card.pp-stat-main .pp-stat-value {
+  color: var(--accent);
+}
+
+.pp-stat-value.pp-peak {
+  color: var(--gold);
+}
+
+.pp-stat-sub {
+  font-size: 0.65rem;
+  color: var(--muted);
+}
+
+.pp-surfaces {
+  margin-bottom: 0.8rem;
+}
+
+.pp-section-title {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--muted);
+  font-weight: 600;
+  margin-bottom: 0.65rem;
+}
+
+.elo-surface-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.elo-surface-row:last-child {
+  margin-bottom: 0;
+}
+
+.elo-surface-label {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text);
+  min-width: 3rem;
+  flex-shrink: 0;
+}
+
+.elo-surface-track {
+  flex: 1;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--line);
+  overflow: hidden;
+}
+
+.elo-surface-fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.6s ease;
+}
+
+.elo-surface-value {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text);
+  min-width: 3.5rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.elo-surface-rank {
+  font-size: 0.7rem;
+  color: var(--muted);
+  min-width: 2.3rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.pp-footer {
+  font-size: 0.63rem;
+  color: var(--muted);
+  opacity: 0.7;
+  border-top: 1px solid var(--line);
+  padding-top: 0.6rem;
+  margin-top: 0.8rem;
+}
