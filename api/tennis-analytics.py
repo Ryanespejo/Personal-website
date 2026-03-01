@@ -753,6 +753,7 @@ def _neo_custom_analytics(
         return {
             "source": "neo4j",
             "neo4j_enabled": True,
+            "rapidapi_enabled": bool(_rapidapi_key()),
             "player_ids": {"p1": str(p1.get("id")), "p2": str(p2.get("id"))},
             "player_stats": {
                 "p1": {
