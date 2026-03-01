@@ -503,7 +503,7 @@ function MLPrediction({ data, p1name, p2name }) {
           {staleModel && <span style={{ color: 'var(--gold)' }}> (stale: {modelAgeDays} days old)</span>}
         </div>
       )}
-      <div className="ml-model-info">Live enrichment: {custom.rapidapi_enabled ? 'enabled (24h cache)' : 'disabled (set RAPIDAPI_KEY)'}</div>
+      <div className="ml-model-info">Live enrichment: {custom.neo4j_enabled || custom.rapidapi_enabled ? `enabled via ${custom.neo4j_enabled ? 'Neo4j' : 'RapidAPI'} (24h cache)` : 'disabled (set RAPIDAPI_KEY)'}</div>
       {customP1 != null && customP2 != null && (
         <div className="ml-model-info">Custom model: {p1name} {customP1}% · {customP2}% {p2name}</div>
       )}

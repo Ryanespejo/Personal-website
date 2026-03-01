@@ -827,7 +827,7 @@
         const ensemble = d.ensemble_win_prob || {};
         const ensP1 = Number.isFinite(ensemble.p1) ? Math.round(ensemble.p1 * 100) : null;
         const ensP2 = Number.isFinite(ensemble.p2) ? Math.round(ensemble.p2 * 100) : null;
-        const rapidEnabled = !!custom.rapidapi_enabled;
+        const rapidEnabled = !!(custom.rapidapi_enabled || custom.neo4j_enabled);
 
         el.innerHTML = `
           <div class="ml-prob-row">
@@ -844,7 +844,7 @@
           </div>
           ${factorsHtml ? `<div class="ins-title" style="margin-top:0.3rem">Key Factors</div><ul class="ml-factors">${factorsHtml}</ul>` : ''}
           ${infoLine ? `<div class="ml-model-info">Model: ${infoLine}${staleModel ? ` <span style="color:var(--gold)">(stale: ${modelAgeDays} days old)</span>` : ''}</div>` : ''}
-          <div class="ml-model-info">Live enrichment: ${rapidEnabled ? 'enabled (24h cache)' : 'disabled (set RAPIDAPI_KEY)'}</div>
+          <div class="ml-model-info">Live enrichment: ${rapidEnabled ? `enabled via ${custom.neo4j_enabled ? 'Neo4j' : 'RapidAPI'} (24h cache)` : 'disabled (set RAPIDAPI_KEY)'}</div>
           ${(customP1 != null && customP2 != null) ? `<div class="ml-model-info">Custom model: ${name1} ${customP1}% · ${customP2}% ${name2}</div>` : ''}
           ${(ensP1 != null && ensP2 != null) ? `<div class="ml-model-info">Ensemble blend: ${name1} ${ensP1}% · ${ensP2}% ${name2}</div>` : ''}`;
 
