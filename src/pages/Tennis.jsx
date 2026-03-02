@@ -107,22 +107,28 @@ function MatchCard({ match, selected, onSelect, onPlayerClick }) {
 
 function PlayerProfile({ playerName, tour, onClose }) {
   const [elo, setElo] = useState(null)
+  const [serveReturn, setServeReturn] = useState(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     setLoading(true)
     setElo(null)
+    setServeReturn(null)
     const enc = encodeURIComponent(playerName)
-    fetch(`/api/tennis-elo?player=${enc}&tour=${tour || 'atp'}`, {
+    const t = tour || 'atp'
+    const eloReq = fetch(`/api/tennis-elo?player=${enc}&tour=${t}`, {
       signal: AbortSignal.timeout(10000),
+    }).then(r => r.json()).catch(() => null)
+    const srReq = fetch(`/api/tennis-serve-return?player=${enc}&tour=${t}`, {
+      signal: AbortSignal.timeout(10000),
+    }).then(r => r.json()).catch(() => null)
+    Promise.all([eloReq, srReq]).then(([eloData, srData]) => {
+      const eloResults = eloData?.results || []
+      setElo(eloResults.length > 0 ? eloResults[0] : null)
+      const srResults = srData?.results || []
+      setServeReturn(srResults.length > 0 ? srResults[0] : null)
+      setLoading(false)
     })
-      .then(r => r.json())
-      .then(data => {
-        const results = data.results || []
-        setElo(results.length > 0 ? results[0] : null)
-        setLoading(false)
-      })
-      .catch(() => setLoading(false))
   }, [playerName, tour])
 
   const surfaceBar = (label, eloVal, rank, color) => {
@@ -182,6 +188,79 @@ function PlayerProfile({ playerName, tour, onClose }) {
               {surfaceBar('Clay', elo.clay_elo, elo.clay_elo_rank, '#f9a8d4')}
               {surfaceBar('Grass', elo.grass_elo, elo.grass_elo_rank, '#62f2a6')}
             </div>
+
+            {serveReturn && (
+              <div className="pp-serve-return">
+                <div className="pp-section-title">Serve &amp; Return Stats</div>
+                <div className="pp-sr-grid">
+                  <div className="pp-sr-col">
+                    <div className="pp-sr-col-title">Serve</div>
+                    <div className="pp-sr-row">
+                      <span className="pp-sr-label">1st Serve In</span>
+                      <span className="pp-sr-value">{serveReturn.first_serve_in != null ? (serveReturn.first_serve_in * 100).toFixed(1) + '%' : '—'}</span>
+                    </div>
+                    <div className="pp-sr-row">
+                      <span className="pp-sr-label">1st Serve Won</span>
+                      <span className="pp-sr-value">{serveReturn.first_serve_won != null ? (serveReturn.first_serve_won * 100).toFixed(1) + '%' : '—'}</span>
+                    </div>
+                    <div className="pp-sr-row">
+                      <span className="pp-sr-label">2nd Serve Won</span>
+                      <span className="pp-sr-value">{serveReturn.second_serve_won != null ? (serveReturn.second_serve_won * 100).toFixed(1) + '%' : '—'}</span>
+                    </div>
+                    <div className="pp-sr-row">
+                      <span className="pp-sr-label">Ace Rate</span>
+                      <span className="pp-sr-value">{serveReturn.ace_rate != null ? (serveReturn.ace_rate * 100).toFixed(1) + '%' : '—'}</span>
+                    </div>
+                    <div className="pp-sr-row">
+                      <span className="pp-sr-label">DF Rate</span>
+                      <span className="pp-sr-value">{serveReturn.df_rate != null ? (serveReturn.df_rate * 100).toFixed(1) + '%' : '—'}</span>
+                    </div>
+                    <div className="pp-sr-row">
+                      <span className="pp-sr-label">Hold %</span>
+                      <span className="pp-sr-value">{serveReturn.hold_pct != null ? (serveReturn.hold_pct * 100).toFixed(1) + '%' : '—'}</span>
+                    </div>
+                    <div className="pp-sr-row pp-sr-rank">
+                      <span className="pp-sr-label">Serve Rank</span>
+                      <span className="pp-sr-value">#{serveReturn.serve_rank ?? '—'}</span>
+                    </div>
+                  </div>
+                  <div className="pp-sr-col">
+                    <div className="pp-sr-col-title">Return</div>
+                    <div className="pp-sr-row">
+                      <span className="pp-sr-label">vs 1st Serve</span>
+                      <span className="pp-sr-value">{serveReturn.v_first_serve_won != null ? (serveReturn.v_first_serve_won * 100).toFixed(1) + '%' : '—'}</span>
+                    </div>
+                    <div className="pp-sr-row">
+                      <span className="pp-sr-label">vs 2nd Serve</span>
+                      <span className="pp-sr-value">{serveReturn.v_second_serve_won != null ? (serveReturn.v_second_serve_won * 100).toFixed(1) + '%' : '—'}</span>
+                    </div>
+                    <div className="pp-sr-row">
+                      <span className="pp-sr-label">Break %</span>
+                      <span className="pp-sr-value">{serveReturn.break_pct != null ? (serveReturn.break_pct * 100).toFixed(1) + '%' : '—'}</span>
+                    </div>
+                    <div className="pp-sr-row">
+                      <span className="pp-sr-label">RPW</span>
+                      <span className="pp-sr-value">{serveReturn.rpw != null ? (serveReturn.rpw * 100).toFixed(1) + '%' : '—'}</span>
+                    </div>
+                    <div className="pp-sr-row">
+                      <span className="pp-sr-label">Dominance</span>
+                      <span className="pp-sr-value">{serveReturn.dominance_ratio ?? '—'}</span>
+                    </div>
+                    <div className="pp-sr-row">
+                      <span className="pp-sr-label">Total PWon</span>
+                      <span className="pp-sr-value">{serveReturn.tpw != null ? (serveReturn.tpw * 100).toFixed(1) + '%' : '—'}</span>
+                    </div>
+                    <div className="pp-sr-row pp-sr-rank">
+                      <span className="pp-sr-label">Return Rank</span>
+                      <span className="pp-sr-value">#{serveReturn.return_rank ?? '—'}</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="pp-sr-record">
+                  {serveReturn.wins}-{serveReturn.losses} ({serveReturn.match_win_pct != null ? (serveReturn.match_win_pct * 100).toFixed(1) + '%' : '—'}) &middot; {serveReturn.matches} matches
+                </div>
+              </div>
+            )}
 
             <div className="pp-footer">
               Source: Tennis Abstract &middot; Updated weekly
