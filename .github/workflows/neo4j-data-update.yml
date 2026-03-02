@@ -55,6 +55,14 @@ jobs:
       - name: Ingest WTA Elo ratings
         run: python -m api.db.ingestion.tennis_elo --tours wta
 
+      # ── Tennis Serve & Return Stats (from Tennis Abstract) ──────────────
+      # Aggregated from match-level JS data; safe to run daily.
+      - name: Ingest ATP serve/return stats
+        run: python -m api.db.ingestion.tennis_serve_return --tours atp
+
+      - name: Ingest WTA serve/return stats
+        run: python -m api.db.ingestion.tennis_serve_return --tours wta
+
       # ── NBA ───────────────────────────────────────────────────────────────
       - name: Ingest NBA scoreboard (today)
         run: python -m api.db.ingestion.nba
