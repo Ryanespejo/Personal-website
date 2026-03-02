@@ -77,6 +77,12 @@ FEATURES = [
     "p1_ace_rate", "p2_ace_rate",
     "p1_bp_save_rate", "p2_bp_save_rate",
     "p1_first_serve_win_pct", "p2_first_serve_win_pct",
+    "elo_diff", "surface_elo_diff",
+    "p1_spw", "p2_spw",
+    "p1_rpw", "p2_rpw",
+    "p1_second_serve_win_pct", "p2_second_serve_win_pct",
+    "p1_hold_pct", "p2_hold_pct",
+    "p1_break_pct", "p2_break_pct",
     "surface_clay", "surface_grass", "surface_hard", "surface_carpet",
     "best_of_5",
 ]
@@ -99,12 +105,81 @@ FEATURE_LABELS = {
     "p2_bp_save_rate":        "Break-point save % (P2)",
     "p1_first_serve_win_pct": "1st-serve win % (P1)",
     "p2_first_serve_win_pct": "1st-serve win % (P2)",
+    "elo_diff":               "Elo rating difference",
+    "surface_elo_diff":       "Surface Elo difference",
+    "p1_spw":                 "Serve points won (P1)",
+    "p2_spw":                 "Serve points won (P2)",
+    "p1_rpw":                 "Return points won (P1)",
+    "p2_rpw":                 "Return points won (P2)",
+    "p1_second_serve_win_pct": "2nd-serve win % (P1)",
+    "p2_second_serve_win_pct": "2nd-serve win % (P2)",
+    "p1_hold_pct":            "Hold % (P1)",
+    "p2_hold_pct":            "Hold % (P2)",
+    "p1_break_pct":           "Break % (P1)",
+    "p2_break_pct":           "Break % (P2)",
     "surface_clay":           "Clay court",
     "surface_grass":          "Grass court",
     "surface_hard":           "Hard court",
     "surface_carpet":         "Carpet court",
     "best_of_5":              "Best-of-5 format",
 }
+
+# ── Tennis Abstract data fetchers (for runtime Elo + serve/return) ────────
+
+_ta_cache: dict = {}
+TA_CACHE_TTL = 3600  # 1 hour
+
+
+def _fetch_ta_elo(player_name: str, tour: str) -> dict | None:
+    """Fetch player Elo ratings from the tennis-elo API."""
+    cache_key = f"ta_elo_{tour}_{player_name.lower()}"
+    now = time.time()
+    if cache_key in _ta_cache and now - _ta_cache[cache_key]["ts"] < TA_CACHE_TTL:
+        return _ta_cache[cache_key]["data"]
+    try:
+        enc = urllib.parse.quote(player_name)
+        url = f"http://localhost:3000/api/tennis-elo?player={enc}&tour={tour}"
+        # In production, use relative path via internal fetch
+        # Fall back to the serverless function URL
+        import os as _os
+        vercel_url = _os.getenv("VERCEL_URL", "")
+        if vercel_url:
+            url = f"https://{vercel_url}/api/tennis-elo?player={enc}&tour={tour}"
+        req = urllib.request.Request(url, headers={"Accept": "application/json"})
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            data = json.loads(resp.read().decode())
+        results = data.get("results", [])
+        result = results[0] if results else None
+        _ta_cache[cache_key] = {"ts": now, "data": result}
+        return result
+    except Exception:
+        _ta_cache[cache_key] = {"ts": now, "data": None}
+        return None
+
+
+def _fetch_ta_serve_return(player_name: str, tour: str) -> dict | None:
+    """Fetch player serve/return stats from the tennis-serve-return API."""
+    cache_key = f"ta_sr_{tour}_{player_name.lower()}"
+    now = time.time()
+    if cache_key in _ta_cache and now - _ta_cache[cache_key]["ts"] < TA_CACHE_TTL:
+        return _ta_cache[cache_key]["data"]
+    try:
+        enc = urllib.parse.quote(player_name)
+        url = f"http://localhost:3000/api/tennis-serve-return?player={enc}&tour={tour}"
+        import os as _os
+        vercel_url = _os.getenv("VERCEL_URL", "")
+        if vercel_url:
+            url = f"https://{vercel_url}/api/tennis-serve-return?player={enc}&tour={tour}"
+        req = urllib.request.Request(url, headers={"Accept": "application/json"})
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            data = json.loads(resp.read().decode())
+        results = data.get("results", [])
+        result = results[0] if results else None
+        _ta_cache[cache_key] = {"ts": now, "data": result}
+        return result
+    except Exception:
+        _ta_cache[cache_key] = {"ts": now, "data": None}
+        return None
 
 
 # ── Model loading ────────────────────────────────────────────────────────────
@@ -904,7 +979,9 @@ def _compute_features(
 
     def _stats(pid: str, opp_id: str):
         w = l = sw = st = h2h_w = h2h_l = 0
-        t_ace = t_svpt = t_1W = t_1I = t_bpS = t_bpF = 0
+        t_ace = t_svpt = t_1W = t_1I = t_2W = t_bpS = t_bpF = t_svG = 0
+        # Return-side stats (opponent's serve data)
+        r_osvpt = r_o1W = r_o2W = r_obpS = r_obpF = r_osvG = 0
         for m in all_m:
             wid, lid = m.get("winner_id", ""), m.get("loser_id", "")
             surf = (m.get("surface") or "").lower()
@@ -917,8 +994,16 @@ def _compute_features(
                 t_svpt += int(m.get("w_svpt") or 0)
                 t_1W += int(m.get("w_1stWon") or 0)
                 t_1I += int(m.get("w_1stIn") or 0)
+                t_2W += int(m.get("w_2ndWon") or 0)
                 t_bpS += int(m.get("w_bpSaved") or 0)
                 t_bpF += int(m.get("w_bpFaced") or 0)
+                t_svG += int(m.get("w_SvGms") or 0)
+                r_osvpt += int(m.get("l_svpt") or 0)
+                r_o1W += int(m.get("l_1stWon") or 0)
+                r_o2W += int(m.get("l_2ndWon") or 0)
+                r_obpS += int(m.get("l_bpSaved") or 0)
+                r_obpF += int(m.get("l_bpFaced") or 0)
+                r_osvG += int(m.get("l_SvGms") or 0)
             elif lid == pid:
                 l += 1
                 if surface and surf == surface.lower():
@@ -928,9 +1013,23 @@ def _compute_features(
                 t_svpt += int(m.get("l_svpt") or 0)
                 t_1W += int(m.get("l_1stWon") or 0)
                 t_1I += int(m.get("l_1stIn") or 0)
+                t_2W += int(m.get("l_2ndWon") or 0)
                 t_bpS += int(m.get("l_bpSaved") or 0)
                 t_bpF += int(m.get("l_bpFaced") or 0)
+                t_svG += int(m.get("l_SvGms") or 0)
+                r_osvpt += int(m.get("w_svpt") or 0)
+                r_o1W += int(m.get("w_1stWon") or 0)
+                r_o2W += int(m.get("w_2ndWon") or 0)
+                r_obpS += int(m.get("w_bpSaved") or 0)
+                r_obpF += int(m.get("w_bpFaced") or 0)
+                r_osvG += int(m.get("w_SvGms") or 0)
         total = w + l
+        serve_won = t_1W + t_2W
+        second_serves = t_svpt - t_1I
+        bp_lost = t_bpF - t_bpS
+        holds = t_svG - bp_lost if t_svG > bp_lost else 0
+        opp_serve_won = r_o1W + r_o2W
+        bp_conv = r_obpF - r_obpS
         return {
             "wr": w / total if total else 0.5,
             "swr": sw / st if st else 0.5,
@@ -938,17 +1037,49 @@ def _compute_features(
             "ace": t_ace / t_svpt if t_svpt else 0.0,
             "fsw": t_1W / t_1I if t_1I else 0.0,
             "bps": t_bpS / t_bpF if t_bpF else 0.0,
+            "spw": serve_won / t_svpt if t_svpt else 0.0,
+            "ssw": t_2W / second_serves if second_serves > 0 else 0.0,
+            "hold": holds / t_svG if t_svG else 0.0,
+            "rpw": (r_osvpt - opp_serve_won) / r_osvpt if r_osvpt else 0.0,
+            "brk": bp_conv / r_osvG if r_osvG else 0.0,
         }
 
-    s1 = _stats(p1_id, p2_id) if p1_id else {"wr": .5, "swr": .5, "h2h_w": 0, "h2h_l": 0, "ace": 0, "fsw": 0, "bps": 0}
-    s2 = _stats(p2_id, p1_id) if p2_id else {"wr": .5, "swr": .5, "h2h_w": 0, "h2h_l": 0, "ace": 0, "fsw": 0, "bps": 0}
+    _empty = {"wr": .5, "swr": .5, "h2h_w": 0, "h2h_l": 0, "ace": 0, "fsw": 0,
+              "bps": 0, "spw": 0, "ssw": 0, "hold": 0, "rpw": 0, "brk": 0}
+    s1 = _stats(p1_id, p2_id) if p1_id else dict(_empty)
+    s2 = _stats(p2_id, p1_id) if p2_id else dict(_empty)
+
+    # Fetch Elo + serve/return from Tennis Abstract APIs
+    p1_elo_data = _fetch_ta_elo(p1_name, tour)
+    p2_elo_data = _fetch_ta_elo(p2_name, tour)
+    p1_sr = _fetch_ta_serve_return(p1_name, tour)
+    p2_sr = _fetch_ta_serve_return(p2_name, tour)
+
+    # Elo values (Tennis Abstract if available, else Sackmann-computed)
+    p1_elo = (p1_elo_data or {}).get("elo") or 1500.0
+    p2_elo = (p2_elo_data or {}).get("elo") or 1500.0
+    sl = (surface or "").lower()
+    surf_elo_key = f"{sl}_elo" if sl else "elo"
+    p1_surf_elo = (p1_elo_data or {}).get(surf_elo_key) or p1_elo
+    p2_surf_elo = (p2_elo_data or {}).get(surf_elo_key) or p2_elo
+
+    # Serve/return: prefer Tennis Abstract, fall back to Sackmann
+    p1_spw = (p1_sr or {}).get("spw") or s1["spw"]
+    p2_spw = (p2_sr or {}).get("spw") or s2["spw"]
+    p1_rpw = (p1_sr or {}).get("rpw") or s1["rpw"]
+    p2_rpw = (p2_sr or {}).get("rpw") or s2["rpw"]
+    p1_ssw = (p1_sr or {}).get("second_serve_won") or s1["ssw"]
+    p2_ssw = (p2_sr or {}).get("second_serve_won") or s2["ssw"]
+    p1_hold = (p1_sr or {}).get("hold_pct") or s1["hold"]
+    p2_hold = (p2_sr or {}).get("hold_pct") or s2["hold"]
+    p1_brk = (p1_sr or {}).get("break_pct") or s1["brk"]
+    p2_brk = (p2_sr or {}).get("break_pct") or s2["brk"]
 
     if p1_rank == 0: p1_rank = 500
     if p2_rank == 0: p2_rank = 500
     mr = max(p1_rank, p2_rank)
     mp = max(p1_points, p2_points, 1)
     h2h_t = s1["h2h_w"] + s1["h2h_l"]
-    sl = (surface or "").lower()
 
     feats = {
         "rank_diff": p1_rank - p2_rank,
@@ -962,6 +1093,13 @@ def _compute_features(
         "p1_ace_rate": s1["ace"], "p2_ace_rate": s2["ace"],
         "p1_bp_save_rate": s1["bps"], "p2_bp_save_rate": s2["bps"],
         "p1_first_serve_win_pct": s1["fsw"], "p2_first_serve_win_pct": s2["fsw"],
+        "elo_diff": p1_elo - p2_elo,
+        "surface_elo_diff": p1_surf_elo - p2_surf_elo,
+        "p1_spw": p1_spw, "p2_spw": p2_spw,
+        "p1_rpw": p1_rpw, "p2_rpw": p2_rpw,
+        "p1_second_serve_win_pct": p1_ssw, "p2_second_serve_win_pct": p2_ssw,
+        "p1_hold_pct": p1_hold, "p2_hold_pct": p2_hold,
+        "p1_break_pct": p1_brk, "p2_break_pct": p2_brk,
         "surface_clay": 1.0 if sl == "clay" else 0.0,
         "surface_grass": 1.0 if sl == "grass" else 0.0,
         "surface_hard": 1.0 if sl == "hard" else 0.0,
