@@ -871,6 +871,77 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* ── Serve & Return stats ── */
+.pp-serve-return {
+  margin-bottom: 0.8rem;
+}
+
+.pp-sr-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+.pp-sr-col {
+  background: var(--panel-soft);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0.6rem 0.65rem;
+}
+
+.pp-sr-col-title {
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+  margin-bottom: 0.5rem;
+}
+
+.pp-sr-col:last-child .pp-sr-col-title {
+  color: var(--atp);
+}
+
+.pp-sr-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.2rem 0;
+}
+
+.pp-sr-row + .pp-sr-row {
+  border-top: 1px solid rgba(37, 45, 69, 0.5);
+}
+
+.pp-sr-label {
+  font-size: 0.7rem;
+  color: var(--muted);
+}
+
+.pp-sr-value {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.pp-sr-row.pp-sr-rank {
+  margin-top: 0.25rem;
+  padding-top: 0.35rem;
+  border-top: 1px solid var(--line);
+}
+
+.pp-sr-row.pp-sr-rank .pp-sr-value {
+  color: var(--gold);
+}
+
+.pp-sr-record {
+  text-align: center;
+  font-size: 0.68rem;
+  color: var(--muted);
+  margin-top: 0.6rem;
+}
+
 .pp-footer {
   font-size: 0.63rem;
   color: var(--muted);
