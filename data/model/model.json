@@ -148,7 +148,7 @@
     ]
   },
   "metadata": {
-    "trained_at": "2026-05-21T08:58:30Z",
+    "trained_at": "2026-05-22T08:50:43Z",
     "training_samples": 95397,
     "test_samples": 23850,
     "accuracy": 0.8599,
